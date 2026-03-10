@@ -1,0 +1,78 @@
+import { motion } from 'framer-motion'
+
+const orbs = [
+  {
+    color: 'var(--orb-1)',
+    size: 900,
+    x: [-50, 70, -50],
+    y: [0, -60, 0],
+    dur: 20,
+    left: '5%',
+    top: '5%',
+    opacity: 0.5,
+  },
+  {
+    color: 'var(--orb-2)',
+    size: 800,
+    x: [40, -60, 40],
+    y: [-40, 50, -40],
+    dur: 25,
+    left: '55%',
+    top: '0%',
+    opacity: 0.45,
+  },
+  {
+    color: 'var(--orb-3)',
+    size: 750,
+    x: [-30, 50, -30],
+    y: [30, -70, 30],
+    dur: 18,
+    left: '25%',
+    top: '45%',
+    opacity: 0.4,
+  },
+  {
+    color: 'var(--orb-4)',
+    size: 1000,
+    x: [60, -40, 60],
+    y: [-25, 40, -25],
+    dur: 22,
+    left: '65%',
+    top: '55%',
+    opacity: 0.35,
+  },
+]
+
+export default function BackgroundOrbs() {
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
+      {orbs.map((orb, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            width: orb.size,
+            height: orb.size,
+            background: `radial-gradient(circle at 40% 40%, ${orb.color}, transparent 65%)`,
+            filter: 'blur(100px)',
+            opacity: orb.opacity,
+            left: orb.left,
+            top: orb.top,
+            willChange: 'transform',
+          }}
+          animate={{
+            x: orb.x,
+            y: orb.y,
+            scale: [1, 1.1, 0.95, 1],
+          }}
+          transition={{
+            duration: orb.dur,
+            repeat: Infinity,
+            ease: 'easeInOut',
+            times: [0, 0.33, 0.66, 1],
+          }}
+        />
+      ))}
+    </div>
+  )
+}

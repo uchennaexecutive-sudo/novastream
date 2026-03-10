@@ -1,0 +1,70 @@
+import axios from 'axios'
+
+const API_KEY = import.meta.env.VITE_TMDB_API_KEY
+const BASE = 'https://api.themoviedb.org/3'
+const IMG_ORIGINAL = 'https://image.tmdb.org/t/p/original'
+const IMG_W500 = 'https://image.tmdb.org/t/p/w500'
+
+const tmdb = axios.create({ baseURL: BASE, params: { api_key: API_KEY } })
+
+export const imgOriginal = (path) => path ? `${IMG_ORIGINAL}${path}` : null
+export const imgW500 = (path) => path ? `${IMG_W500}${path}` : null
+
+export const getTrending = (type = 'all', window = 'week') =>
+  tmdb.get(`/trending/${type}/${window}`).then(r => r.data.results)
+
+export const getPopularMovies = (page = 1) =>
+  tmdb.get('/movie/popular', { params: { page } }).then(r => r.data)
+
+export const getTopRatedMovies = (page = 1) =>
+  tmdb.get('/movie/top_rated', { params: { page } }).then(r => r.data)
+
+export const getNowPlaying = () =>
+  tmdb.get('/movie/now_playing').then(r => r.data.results)
+
+export const getUpcoming = () =>
+  tmdb.get('/movie/upcoming').then(r => r.data.results)
+
+export const getPopularSeries = (page = 1) =>
+  tmdb.get('/tv/popular', { params: { page } }).then(r => r.data)
+
+export const getTopRatedSeries = (page = 1) =>
+  tmdb.get('/tv/top_rated', { params: { page } }).then(r => r.data)
+
+export const getOnAir = () =>
+  tmdb.get('/tv/on_the_air').then(r => r.data.results)
+
+export const getSeriesByNetwork = (networkId, page = 1) =>
+  tmdb.get('/discover/tv', { params: { with_networks: networkId, page } }).then(r => r.data)
+
+export const getAnimationMovies = (page = 1) =>
+  tmdb.get('/discover/movie', { params: { with_genres: 16, page } }).then(r => r.data)
+
+export const getAnimeSeries = (page = 1) =>
+  tmdb.get('/discover/tv', { params: { with_genres: 16, with_keywords: 210024, page } }).then(r => r.data)
+
+export const getDetails = (type, id) =>
+  tmdb.get(`/${type}/${id}`, { params: { append_to_response: 'credits,videos,similar,images' } }).then(r => r.data)
+
+export const getSeasonDetails = (seriesId, season) =>
+  tmdb.get(`/tv/${seriesId}/season/${season}`).then(r => r.data)
+
+export const searchMulti = (query) =>
+  tmdb.get('/search/multi', { params: { query } }).then(r => r.data.results)
+
+export const getImages = (type, id) =>
+  tmdb.get(`/${type}/${id}/images`).then(r => r.data)
+
+export const discoverMovies = (params = {}) =>
+  tmdb.get('/discover/movie', { params }).then(r => r.data)
+
+export const discoverTV = (params = {}) =>
+  tmdb.get('/discover/tv', { params }).then(r => r.data)
+
+export const GENRE_MAP = {
+  28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy',
+  80: 'Crime', 99: 'Documentary', 18: 'Drama', 10751: 'Family',
+  14: 'Fantasy', 36: 'History', 27: 'Horror', 10402: 'Music',
+  9648: 'Mystery', 10749: 'Romance', 878: 'Sci-Fi', 53: 'Thriller',
+  10752: 'War', 37: 'Western',
+}

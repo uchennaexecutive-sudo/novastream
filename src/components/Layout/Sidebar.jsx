@@ -1,0 +1,145 @@
+import { NavLink, useLocation } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useState } from 'react'
+
+const navItems = [
+  { path: '/', label: 'Home', icon: '⌂' },
+  { path: '/movies', label: 'Movies', icon: '🎬' },
+  { path: '/series', label: 'Series', icon: '📺' },
+  { path: '/anime', label: 'Anime', icon: '⚔' },
+  { path: '/animation', label: 'Animation', icon: '🎨' },
+]
+
+const bottomItems = [
+  { path: '/watchlist', label: 'Watchlist', icon: '★' },
+  { path: '/history', label: 'History', icon: '⏱' },
+  { path: '/settings', label: 'Settings', icon: '⚙' },
+]
+
+export default function Sidebar() {
+  const [hovered, setHovered] = useState(false)
+  const location = useLocation()
+
+  return (
+    <motion.nav
+      className="fixed left-0 top-0 bottom-0 flex flex-col py-5 gap-1"
+      style={{
+        background: 'var(--sidebar-bg)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        borderRight: '1px solid var(--border)',
+        boxShadow: 'var(--sidebar-shadow), var(--inner-glow)',
+        zIndex: 50,
+      }}
+      animate={{ width: hovered ? 240 : 72 }}
+      transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Logo */}
+      <div className="flex items-center gap-2.5 px-4 mb-8 h-11 overflow-hidden whitespace-nowrap">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-display font-bold text-lg"
+          style={{
+            background: 'var(--accent)',
+            color: '#fff',
+            boxShadow: '0 0 20px var(--accent-glow)',
+          }}
+        >
+          N
+        </div>
+        <AnimatePresence>
+          {hovered && (
+            <motion.span
+              className="font-display font-bold text-base tracking-wide"
+              style={{ color: 'var(--text-primary)' }}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              NOVA STREAM
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Main Nav */}
+      <div className="flex flex-col gap-0.5 flex-1 w-full px-2.5">
+        {navItems.map((item) => {
+          const isActive = item.path === '/'
+            ? location.pathname === '/'
+            : location.pathname.startsWith(item.path)
+          return (
+            <SidebarLink key={item.path} item={item} isActive={isActive} hovered={hovered} />
+          )
+        })}
+      </div>
+
+      {/* Divider */}
+      <div className="mx-4 my-2 h-px" style={{ background: 'var(--border)' }} />
+
+      {/* Bottom Nav */}
+      <div className="flex flex-col gap-0.5 w-full px-2.5 pb-2">
+        {bottomItems.map((item) => {
+          const isActive = location.pathname.startsWith(item.path)
+          return (
+            <SidebarLink key={item.path} item={item} isActive={isActive} hovered={hovered} />
+          )
+        })}
+      </div>
+    </motion.nav>
+  )
+}
+
+function SidebarLink({ item, isActive, hovered }) {
+  return (
+    <NavLink
+      to={item.path}
+      className="relative flex items-center gap-3 px-3 py-2.5 rounded-xl overflow-hidden whitespace-nowrap group"
+      style={{
+        background: isActive ? 'var(--bg-elevated)' : 'transparent',
+        color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+      }}
+    >
+      {/* Glowing active indicator */}
+      {isActive && (
+        <motion.div
+          layoutId="sidebar-active"
+          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-7 rounded-r-full"
+          style={{
+            background: 'var(--accent)',
+            boxShadow: '0 0 12px var(--accent-glow-strong), 2px 0 20px var(--accent-glow)',
+          }}
+          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+        />
+      )}
+
+      <span className="text-lg w-6 text-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
+        {item.icon}
+      </span>
+
+      <AnimatePresence>
+        {hovered && (
+          <motion.span
+            className="text-sm font-medium"
+            initial={{ opacity: 0, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -4 }}
+            transition={{ duration: 0.15 }}
+          >
+            {item.label}
+          </motion.span>
+        )}
+      </AnimatePresence>
+
+      {/* Hover highlight */}
+      {!isActive && (
+        <div
+          className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 -z-10"
+          style={{ background: 'var(--bg-surface)' }}
+        />
+      )}
+    </NavLink>
+  )
+}
