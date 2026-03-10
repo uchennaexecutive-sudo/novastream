@@ -8,25 +8,32 @@ export default function UpdateToast({ updateInfo, onDismiss }) {
   if (!updateInfo) return null
 
   const handleUpdate = async () => {
-    try {
-      setDownloading(true)
-      let downloaded = 0
-      await updateInfo.update.downloadAndInstall((event) => {
-        if (event.event === 'Started' && event.data.contentLength) {
-          // total size known
-        } else if (event.event === 'Progress') {
-          downloaded += event.data.chunkLength
-          setProgress(Math.min(downloaded / (event.data.contentLength || downloaded + 1) * 100, 100))
-        } else if (event.event === 'Finished') {
-          setProgress(100)
+    // If we have a Tauri update object, use it for seamless update
+    if (updateInfo.update) {
+      try {
+        setDownloading(true)
+        let downloaded = 0
+        await updateInfo.update.downloadAndInstall((event) => {
+          if (event.event === 'Progress') {
+            downloaded += event.data.chunkLength
+            setProgress(Math.min(downloaded / (event.data.contentLength || downloaded + 1) * 100, 100))
+          } else if (event.event === 'Finished') {
+            setProgress(100)
+          }
+        })
+        const { relaunch } = await import('@tauri-apps/plugin-process')
+        await relaunch()
+      } catch (e) {
+        console.error('Update failed:', e)
+        // Fall back to browser download
+        if (updateInfo.downloadUrl) {
+          window.open(updateInfo.downloadUrl, '_blank')
         }
-      })
-      // Relaunch after install
-      const { relaunch } = await import('@tauri-apps/plugin-process')
-      await relaunch()
-    } catch (e) {
-      console.error('Update failed:', e)
-      setDownloading(false)
+        setDownloading(false)
+      }
+    } else if (updateInfo.downloadUrl) {
+      // Fallback: open download in browser
+      window.open(updateInfo.downloadUrl, '_blank')
     }
   }
 
@@ -56,9 +63,14 @@ export default function UpdateToast({ updateInfo, onDismiss }) {
         >
           Update Available
         </h3>
-        <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
+        <p className="text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
           NOVA STREAM v{updateInfo.version} is ready
         </p>
+        {updateInfo.notes && (
+          <p className="text-xs mb-4 font-mono" style={{ color: 'var(--text-muted)' }}>
+            {updateInfo.notes}
+          </p>
+        )}
 
         {downloading && (
           <div
@@ -86,7 +98,7 @@ export default function UpdateToast({ updateInfo, onDismiss }) {
               opacity: downloading ? 0.6 : 1,
             }}
           >
-            {downloading ? 'Downloading...' : 'Update Now'}
+            {downloading ? 'Downloading...' : updateInfo.update ? 'Update Now' : 'Download Update'}
           </button>
           {!downloading && (
             <button
