@@ -118,11 +118,14 @@ export default function Settings() {
               <p className="font-display font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
                 NOVA STREAM
               </p>
-              <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>v1.0.0</p>
+              <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>v1.0.1</p>
             </div>
           </div>
           <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
             Your Universe of Stories
+          </p>
+          <p className="text-xs mb-2 font-mono" style={{ color: 'var(--accent)' }}>
+            v1.0.1 — Performance improvements and bug fixes
           </p>
           <div className="h-px my-3" style={{ background: 'var(--border)' }} />
           <p className="text-xs mb-1.5" style={{ color: 'var(--text-muted)' }}>
