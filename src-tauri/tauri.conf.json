@@ -1,6 +1,6 @@
 {
   "productName": "NOVA STREAM",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "identifier": "com.novastream.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -17,8 +17,9 @@
         "minWidth": 1280,
         "minHeight": 720,
         "resizable": true,
-        "fullscreen": true,
-        "decorations": false
+        "maximized": true,
+        "fullscreen": false,
+        "decorations": true
       }
     ],
     "security": {
