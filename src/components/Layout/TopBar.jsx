@@ -1,8 +1,6 @@
 import { motion } from 'framer-motion'
 import useAppStore from '../../store/useAppStore'
 
-const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
-
 export default function TopBar() {
   const setSearchOpen = useAppStore(s => s.setSearchOpen)
 
@@ -10,7 +8,7 @@ export default function TopBar() {
     <div
       className="fixed right-0 left-[72px] h-14 flex items-center justify-between px-6"
       style={{
-        top: isTauri ? 32 : 0,
+        top: 0,
         background: 'var(--topbar-bg)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',

@@ -1,53 +1,75 @@
-import { createClient } from '@supabase/supabase-js'
+// Local storage-backed watchlist & history (no external DB required)
 
-const supabaseUrl = 'https://owymezptcmwmrlkeuxcg.supabase.co'
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93eW1lenB0Y213bXJsa2V1eGNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMTM2NjEsImV4cCI6MjA4ODU4OTY2MX0.4OZvH_afMKK-CCEgSrW4ga7oC2y0Hqh3uz5ZeRVtvPQ'
+const WATCHLIST_KEY = 'nova-watchlist'
+const HISTORY_KEY = 'nova-history'
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+function readStore(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function writeStore(key, data) {
+  localStorage.setItem(key, JSON.stringify(data))
+}
 
 // Watchlist
 export const getWatchlist = async () => {
-  const { data } = await supabase.from('nova_watchlist').select('*').order('added_at', { ascending: false })
-  return data || []
+  return readStore(WATCHLIST_KEY)
 }
 
 export const addToWatchlist = async (item) => {
-  const { data } = await supabase.from('nova_watchlist').upsert({
+  const list = readStore(WATCHLIST_KEY)
+  const idx = list.findIndex(i => i.tmdb_id === item.tmdb_id)
+  const entry = {
+    id: item.tmdb_id,
     tmdb_id: item.tmdb_id,
     media_type: item.media_type,
     title: item.title,
     poster_path: item.poster_path,
-    user_id: 'local',
     added_at: new Date().toISOString(),
-  }, { onConflict: 'tmdb_id,user_id' })
-  return data
+  }
+  if (idx >= 0) {
+    list[idx] = entry
+  } else {
+    list.unshift(entry)
+  }
+  writeStore(WATCHLIST_KEY, list)
 }
 
 export const removeFromWatchlist = async (tmdbId) => {
-  await supabase.from('nova_watchlist').delete().eq('tmdb_id', tmdbId)
+  const list = readStore(WATCHLIST_KEY).filter(i => i.tmdb_id !== tmdbId)
+  writeStore(WATCHLIST_KEY, list)
 }
 
 export const isInWatchlist = async (tmdbId) => {
-  const { data } = await supabase.from('nova_watchlist').select('id').eq('tmdb_id', tmdbId).single()
-  return !!data
+  return readStore(WATCHLIST_KEY).some(i => i.tmdb_id === tmdbId)
 }
 
 // History
 export const getHistory = async () => {
-  const { data } = await supabase.from('nova_history').select('*').order('watched_at', { ascending: false })
-  return data || []
+  return readStore(HISTORY_KEY)
 }
 
 export const addToHistory = async (item) => {
-  await supabase.from('nova_history').upsert({
+  const list = readStore(HISTORY_KEY)
+  const idx = list.findIndex(i => i.tmdb_id === item.tmdb_id)
+  const entry = {
+    id: item.tmdb_id,
     tmdb_id: item.tmdb_id,
     media_type: item.media_type,
     title: item.title,
     poster_path: item.poster_path,
     season: item.season || null,
     episode: item.episode || null,
-    user_id: 'local',
     progress_seconds: item.progress_seconds || 0,
     watched_at: new Date().toISOString(),
-  }, { onConflict: 'tmdb_id,user_id' })
+  }
+  if (idx >= 0) {
+    list.splice(idx, 1)
+  }
+  list.unshift(entry)
+  writeStore(HISTORY_KEY, list)
 }
