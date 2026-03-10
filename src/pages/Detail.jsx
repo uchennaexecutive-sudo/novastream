@@ -68,7 +68,7 @@ export default function Detail() {
   return (
     <div>
       {/* ─── Hero Backdrop — full bleed ─── */}
-      <div className="relative w-full h-[70vh] -mt-14 overflow-hidden">
+      <div className="relative w-full h-[55vh] -mt-14 overflow-hidden" style={{ objectPosition: 'center top' }}>
         {backdrop ? (
           <motion.img
             src={backdrop}
@@ -84,19 +84,19 @@ export default function Detail() {
             style={{ background: 'linear-gradient(135deg, var(--bg-base), var(--orb-1), var(--bg-base))' }}
           />
         )}
-        <div className="absolute inset-0" style={{ background: 'var(--hero-overlay)' }} />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, var(--bg-base) 0%, transparent 70%)' }} />
       </div>
 
       {/* ─── Info Panel — 2 column grid ─── */}
-      <div className="relative -mt-64 z-10 px-8 lg:px-16 max-w-[1400px] mx-auto">
-        <div className="grid grid-cols-[280px_1fr] gap-10 items-start">
+      <div className="relative z-10 w-full" style={{ marginTop: -120, padding: '0 64px 64px 64px' }}>
+        <div className="grid grid-cols-[280px_1fr] items-start" style={{ gap: 48 }}>
 
           {/* Left: Poster */}
           <motion.div
             className="rounded-2xl overflow-hidden flex-shrink-0 sticky top-20"
             style={{
               border: '1px solid var(--border)',
-              boxShadow: '0 25px 60px rgba(0,0,0,0.5), 0 0 40px var(--accent-glow)',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.6)',
               aspectRatio: '2/3',
             }}
             initial={{ opacity: 0, y: 30 }}
@@ -124,7 +124,9 @@ export default function Detail() {
               className="font-display font-bold mb-3 leading-[1.1]"
               style={{
                 color: 'var(--text-primary)',
-                fontSize: 'clamp(2.25rem, 4vw, 3.5rem)',
+                fontSize: 52,
+                fontWeight: 700,
+                lineHeight: 1.1,
                 textShadow: '0 4px 30px rgba(0,0,0,0.5)',
               }}
             >
@@ -132,7 +134,7 @@ export default function Detail() {
             </h1>
 
             {data.tagline && (
-              <p className="text-base italic mb-4" style={{ color: 'var(--text-muted)' }}>
+              <p className="italic mb-4" style={{ color: 'var(--text-secondary)', fontSize: 18 }}>
                 "{data.tagline}"
               </p>
             )}
@@ -169,30 +171,55 @@ export default function Detail() {
 
             {/* Overview */}
             <p
-              className="text-base leading-relaxed mb-8"
-              style={{ color: 'var(--text-secondary)', maxWidth: 700 }}
+              style={{ color: 'var(--text-secondary)', maxWidth: 680, fontSize: 16, lineHeight: 1.7 }}
+              className="mb-8"
             >
               {data.overview}
             </p>
 
             {/* Action Buttons */}
-            <div className="flex gap-4">
-              <GlassButton variant="filled" onClick={() => handlePlay(1, 1)} className="accent-pulse !px-8 !py-3.5 !text-base">
+            <div className="flex gap-4" style={{ marginTop: 32 }}>
+              <motion.button
+                onClick={() => handlePlay(1, 1)}
+                className="flex items-center gap-3 font-semibold rounded-xl"
+                style={{
+                  background: 'var(--accent)',
+                  color: '#fff',
+                  padding: '16px 40px',
+                  fontSize: 18,
+                  boxShadow: '0 0 30px var(--accent-glow)',
+                }}
+                whileHover={{ scale: 1.02, boxShadow: '0 0 40px var(--accent-glow)' }}
+                whileTap={{ scale: 0.98 }}
+              >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                   <polygon points="5 3 19 12 5 21 5 3" />
                 </svg>
                 Stream Now
-              </GlassButton>
-              <GlassButton onClick={handleWatchlist} className="!px-8 !py-3.5 !text-base">
+              </motion.button>
+              <motion.button
+                onClick={handleWatchlist}
+                className="font-semibold rounded-xl"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--text-primary)',
+                  padding: '16px 40px',
+                  fontSize: 18,
+                  border: '1px solid var(--border)',
+                  backdropFilter: 'blur(12px)',
+                }}
+                whileHover={{ scale: 1.02, borderColor: 'var(--accent)', boxShadow: '0 0 20px var(--accent-glow)' }}
+                whileTap={{ scale: 0.98 }}
+              >
                 {inWatchlist ? '✓ In Watchlist' : '+ Watchlist'}
-              </GlassButton>
+              </motion.button>
             </div>
           </motion.div>
         </div>
       </div>
 
       {/* ─── Full-width content sections ─── */}
-      <div className="px-8 lg:px-16 py-12 max-w-[1400px] mx-auto space-y-14">
+      <div className="space-y-14" style={{ padding: '48px 64px' }}>
 
         {/* Cast */}
         {cast.length > 0 && (
@@ -237,7 +264,7 @@ export default function Detail() {
                 border: '1px solid var(--border)',
                 boxShadow: 'var(--card-shadow)',
                 aspectRatio: '16/9',
-                maxHeight: 600,
+                maxWidth: 900,
               }}
             >
               <ReactPlayer

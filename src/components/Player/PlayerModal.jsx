@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Maximize, Minimize, X } from 'lucide-react'
 import { getMovieEmbeds, getSeriesEmbeds } from '../../lib/embeds'
 import { addToHistory } from '../../lib/supabase'
-import PlayerControls from './PlayerControls'
 
 // Human-readable server labels
 const SERVER_LABELS = [
@@ -26,7 +25,6 @@ export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title,
   const timeoutRef = useRef(null)
   const chromeTimerRef = useRef(null)
   const playerContainerRef = useRef(null)
-  const iframeRef = useRef(null)
 
   const embeds = mediaType === 'movie'
     ? getMovieEmbeds(tmdbId)
@@ -165,14 +163,6 @@ export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title,
     setLoading(true)
   }
 
-  const nextSource = () => {
-    if (sourceIndex < embeds.length - 1) {
-      switchSource(sourceIndex + 1)
-    } else {
-      switchSource(0)
-    }
-  }
-
   if (!isOpen) return null
 
   // ─── Render via Portal to document.body ───
@@ -214,8 +204,6 @@ export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title,
             background: '#000',
             border: isFullscreen ? 'none' : '1px solid var(--border)',
             boxShadow: isFullscreen ? 'none' : '0 0 80px rgba(0,0,0,0.9)',
-            display: 'flex',
-            flexDirection: 'column',
           }}
           initial={{ scale: 0.92, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -285,124 +273,73 @@ export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title,
             )}
           </AnimatePresence>
 
-          {/* ─── Player Area ─── */}
-          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-            {error ? (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-                <span className="text-4xl opacity-40">⚠</span>
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  All servers exhausted. Try opening in a new tab.
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => switchSource(0)}
-                    className="px-5 py-2.5 rounded-xl text-sm font-medium"
-                    style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-                  >
-                    Retry Server 1
-                  </button>
-                  <a
-                    href={embeds[0]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-5 py-2.5 rounded-xl text-sm font-medium inline-flex items-center gap-2"
-                    style={{ background: 'var(--accent)', color: '#fff', boxShadow: '0 0 20px var(--accent-glow)' }}
-                  >
-                    Open in New Tab
-                  </a>
-                </div>
+          {/* ─── Player Area (fills entire modal) ─── */}
+          {error ? (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+              <span className="text-4xl opacity-40">⚠</span>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                All servers exhausted. Try opening in a new tab.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => switchSource(0)}
+                  className="px-5 py-2.5 rounded-xl text-sm font-medium"
+                  style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+                >
+                  Retry Server 1
+                </button>
+                <a
+                  href={embeds[0]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-2.5 rounded-xl text-sm font-medium inline-flex items-center gap-2"
+                  style={{ background: 'var(--accent)', color: '#fff', boxShadow: '0 0 20px var(--accent-glow)' }}
+                >
+                  Open in New Tab
+                </a>
               </div>
-            ) : (
-              <>
-                <iframe
-                  ref={iframeRef}
-                  key={`${currentUrl}-${sourceIndex}`}
-                  src={currentUrl}
-                  allowFullScreen
-                  allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                  referrerPolicy="no-referrer"
-                  loading="lazy"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    border: 'none',
-                  }}
-                  onLoad={handleIframeLoad}
-                  onError={() => {
-                    clearTimeout(timeoutRef.current)
-                    if (sourceIndex < embeds.length - 1) {
-                      setSourceIndex(i => i + 1)
-                    } else {
-                      setError(true)
-                    }
-                  }}
-                />
-
-                {/* Gradient overlay to visually hide source controls at bottom */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 80,
-                    background: 'linear-gradient(to top, #000000 0%, transparent 100%)',
-                    pointerEvents: 'none',
-                    zIndex: 10,
-                  }}
-                />
-
-                {/* Loading overlay */}
-                {loading && (
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', zIndex: 5 }}>
-                    <div className="flex flex-col items-center gap-3">
-                      <span className="w-8 h-8 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-                      <span className="text-xs text-white/50 font-mono">
-                        Loading {serverLabel}...
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* ─── Bottom Custom Controls ─── */}
-          <AnimatePresence>
-            {showChrome && !error && (
-              <motion.div
+            </div>
+          ) : (
+            <>
+              <iframe
+                key={`${currentUrl}-${sourceIndex}`}
+                src={currentUrl}
+                allowFullScreen
+                allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                referrerPolicy="no-referrer"
+                loading="lazy"
                 style={{
-                  flexShrink: 0,
-                  background: 'rgba(0,0,0,0.6)',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                  borderTop: '1px solid rgba(255,255,255,0.08)',
                   position: 'absolute',
-                  bottom: 0,
+                  top: 0,
                   left: 0,
-                  right: 0,
-                  zIndex: 20,
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
                 }}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                transition={{ duration: 0.2 }}
-              >
-                <PlayerControls
-                  iframeRef={iframeRef}
-                  serverLabel={serverLabel}
-                  title={title}
-                  season={season}
-                  episode={episode}
-                  currentUrl={currentUrl}
-                  onNextSource={nextSource}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+                onLoad={handleIframeLoad}
+                onError={() => {
+                  clearTimeout(timeoutRef.current)
+                  if (sourceIndex < embeds.length - 1) {
+                    setSourceIndex(i => i + 1)
+                  } else {
+                    setError(true)
+                  }
+                }}
+              />
+
+              {/* Loading overlay */}
+              {loading && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', zIndex: 5 }}>
+                  <div className="flex flex-col items-center gap-3">
+                    <span className="w-8 h-8 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+                    <span className="text-xs text-white/50 font-mono">
+                      Loading {serverLabel}...
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>,

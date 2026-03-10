@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "notes": "Initial release of NOVA STREAM",
+  "pub_date": "2026-03-10T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "",
+      "signature": ""
+    }
+  }
+}

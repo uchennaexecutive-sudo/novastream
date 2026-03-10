@@ -4,7 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import BackgroundOrbs from './BackgroundOrbs'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
+import TitleBar from './TitleBar'
 import useAppStore from '../../store/useAppStore'
+
+const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
 
 const pageVariants = {
   initial: { opacity: 0, y: 20, filter: 'blur(4px)' },
@@ -34,10 +37,11 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen relative" style={{ background: 'var(--bg-base)' }}>
+      <TitleBar />
       <BackgroundOrbs />
       <TopBar />
       <Sidebar />
-      <main className="relative ml-[72px] pt-14 min-h-screen" style={{ zIndex: 1 }}>
+      <main className={`relative ml-[72px] min-h-screen ${isTauri ? 'pt-[78px]' : 'pt-14'}`} style={{ zIndex: 1 }}>
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}

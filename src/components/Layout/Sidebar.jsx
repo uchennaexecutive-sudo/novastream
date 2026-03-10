@@ -2,6 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
 
+const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
+
 const navItems = [
   { path: '/', label: 'Home', icon: '⌂' },
   { path: '/movies', label: 'Movies', icon: '🎬' },
@@ -22,8 +24,9 @@ export default function Sidebar() {
 
   return (
     <motion.nav
-      className="fixed left-0 top-0 bottom-0 flex flex-col py-5 gap-1"
+      className="fixed left-0 bottom-0 flex flex-col py-5 gap-1"
       style={{
+        top: isTauri ? 32 : 0,
         background: 'var(--sidebar-bg)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
