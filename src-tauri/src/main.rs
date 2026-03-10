@@ -31,7 +31,7 @@ async fn download_update(url: String) -> Result<String, String> {
     // Create update directory
     fs::create_dir_all(&update_dir).map_err(|e| e.to_string())?;
 
-    let update_path = update_dir.join("NOVA STREAM.exe");
+    let update_path = update_dir.join("nova-stream.exe");
 
     let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
@@ -51,7 +51,7 @@ async fn apply_update() -> Result<(), String> {
     let update_exe = current_exe
         .parent().ok_or("No parent dir")?
         .join("_update")
-        .join("NOVA STREAM.exe");
+        .join("nova-stream.exe");
     let update_path = update_exe.to_string_lossy().to_string();
 
     if !update_exe.exists() {

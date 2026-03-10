@@ -44,7 +44,7 @@ jobs:
         shell: powershell
         run: |
           Write-Host "=== Looking for portable exe ==="
-          $releaseExe = Get-ChildItem -Path "src-tauri/target/release" -Filter "NOVA STREAM.exe" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          $releaseExe = Get-ChildItem -Path "src-tauri/target/release" -Filter "nova-stream.exe" -File -ErrorAction SilentlyContinue | Select-Object -First 1
 
           if ($releaseExe) {
             $exePath = $releaseExe.FullName.Replace('\', '/')
