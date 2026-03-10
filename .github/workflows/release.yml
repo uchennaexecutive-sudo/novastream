@@ -45,32 +45,57 @@ jobs:
 
       - name: Find build artifacts
         id: artifacts
-        shell: bash
+        shell: powershell
         run: |
-          # Find the NSIS installer zip (Tauri v2 default for Windows)
-          NSIS_ZIP=$(find src-tauri/target/release/bundle/nsis -name "*.nsis.zip" 2>/dev/null | head -1)
-          NSIS_SIG=$(find src-tauri/target/release/bundle/nsis -name "*.nsis.zip.sig" 2>/dev/null | head -1)
+          Write-Host "=== Listing all bundle files ==="
+          Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -File | ForEach-Object { Write-Host $_.FullName }
 
-          # Fallback to MSI if no NSIS
-          if [ -z "$NSIS_ZIP" ]; then
-            NSIS_ZIP=$(find src-tauri/target/release/bundle/msi -name "*.msi.zip" 2>/dev/null | head -1)
-            NSIS_SIG=$(find src-tauri/target/release/bundle/msi -name "*.msi.zip.sig" 2>/dev/null | head -1)
-          fi
+          # Find NSIS zip
+          $nsisZip = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.nsis.zip" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          $nsisSig = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.nsis.zip.sig" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          $setupExe = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.exe" -File -ErrorAction SilentlyContinue | Select-Object -First 1
 
-          echo "INSTALLER=$NSIS_ZIP" >> $GITHUB_OUTPUT
-          echo "SIGNATURE=$NSIS_SIG" >> $GITHUB_OUTPUT
-          echo "INSTALLER_NAME=$(basename $NSIS_ZIP)" >> $GITHUB_OUTPUT
+          # Fallback to MSI
+          if (-not $nsisZip) {
+            $nsisZip = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.msi.zip" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+            $nsisSig = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.msi.zip.sig" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
 
-          # Also grab standalone exe for manual download
-          SETUP_EXE=$(find src-tauri/target/release/bundle/nsis -name "*.exe" 2>/dev/null | head -1)
-          echo "SETUP_EXE=$SETUP_EXE" >> $GITHUB_OUTPUT
+          if ($nsisZip) {
+            $installerPath = $nsisZip.FullName.Replace('\', '/')
+            $installerName = $nsisZip.Name
+            Write-Host "Found installer: $installerPath"
+            "INSTALLER=$installerPath" >> $env:GITHUB_OUTPUT
+            "INSTALLER_NAME=$installerName" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "ERROR: No installer zip found!"
+            exit 1
+          }
+
+          if ($nsisSig) {
+            $sigPath = $nsisSig.FullName.Replace('\', '/')
+            Write-Host "Found signature: $sigPath"
+            "SIGNATURE=$sigPath" >> $env:GITHUB_OUTPUT
+          }
+
+          if ($setupExe) {
+            $exePath = $setupExe.FullName.Replace('\', '/')
+            Write-Host "Found exe: $exePath"
+            "SETUP_EXE=$exePath" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Read signature
         id: sig
         shell: bash
         run: |
-          SIG_CONTENT=$(cat "${{ steps.artifacts.outputs.SIGNATURE }}")
-          echo "SIGNATURE=$SIG_CONTENT" >> $GITHUB_OUTPUT
+          SIG_FILE="${{ steps.artifacts.outputs.SIGNATURE }}"
+          if [ -n "$SIG_FILE" ] && [ -f "$SIG_FILE" ]; then
+            SIG_CONTENT=$(cat "$SIG_FILE")
+            echo "SIGNATURE=$SIG_CONTENT" >> $GITHUB_OUTPUT
+          else
+            echo "WARNING: No signature file found"
+            echo "SIGNATURE=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Update latest.json
         shell: bash
@@ -79,7 +104,7 @@ jobs:
           INSTALLER_NAME="${{ steps.artifacts.outputs.INSTALLER_NAME }}"
           SIG="${{ steps.sig.outputs.SIGNATURE }}"
 
-          cat > updates/latest.json << ENDJSON
+          cat > updates/latest.json << EOF
           {
             "version": "$VERSION",
             "notes": "v$VERSION — Auto-release",
@@ -91,7 +116,7 @@ jobs:
               }
             }
           }
-          ENDJSON
+          EOF
 
       - name: Commit updated latest.json
         shell: bash
