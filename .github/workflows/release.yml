@@ -5,10 +5,6 @@ on:
     tags:
       - 'v*'
 
-env:
-  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
 jobs:
   build:
     runs-on: windows-latest
@@ -43,66 +39,29 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Find build artifacts
+      - name: Find portable exe
         id: artifacts
         shell: powershell
         run: |
-          Write-Host "=== Listing all bundle files ==="
-          Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -File | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "=== Looking for portable exe ==="
+          $releaseExe = Get-ChildItem -Path "src-tauri/target/release" -Filter "NOVA STREAM.exe" -File -ErrorAction SilentlyContinue | Select-Object -First 1
 
-          # Find NSIS zip
-          $nsisZip = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.nsis.zip" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-          $nsisSig = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.nsis.zip.sig" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-          $setupExe = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.exe" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-
-          # Fallback to MSI
-          if (-not $nsisZip) {
-            $nsisZip = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.msi.zip" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-            $nsisSig = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -Filter "*.msi.zip.sig" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-
-          if ($nsisZip) {
-            $installerPath = $nsisZip.FullName.Replace('\', '/')
-            $installerName = $nsisZip.Name
-            Write-Host "Found installer: $installerPath"
-            "INSTALLER=$installerPath" >> $env:GITHUB_OUTPUT
-            "INSTALLER_NAME=$installerName" >> $env:GITHUB_OUTPUT
+          if ($releaseExe) {
+            $exePath = $releaseExe.FullName.Replace('\', '/')
+            Write-Host "Found portable exe: $exePath"
+            "PORTABLE_EXE=$exePath" >> $env:GITHUB_OUTPUT
+            "PORTABLE_NAME=NOVA-STREAM-${{ steps.version.outputs.VERSION }}-portable.exe" >> $env:GITHUB_OUTPUT
           } else {
-            Write-Host "ERROR: No installer zip found!"
+            Write-Host "ERROR: No portable exe found! Listing all exes:"
+            Get-ChildItem -Path "src-tauri/target/release" -Filter "*.exe" -File | ForEach-Object { Write-Host $_.FullName }
             exit 1
           }
-
-          if ($nsisSig) {
-            $sigPath = $nsisSig.FullName.Replace('\', '/')
-            Write-Host "Found signature: $sigPath"
-            "SIGNATURE=$sigPath" >> $env:GITHUB_OUTPUT
-          }
-
-          if ($setupExe) {
-            $exePath = $setupExe.FullName.Replace('\', '/')
-            Write-Host "Found exe: $exePath"
-            "SETUP_EXE=$exePath" >> $env:GITHUB_OUTPUT
-          }
-
-      - name: Read signature
-        id: sig
-        shell: bash
-        run: |
-          SIG_FILE="${{ steps.artifacts.outputs.SIGNATURE }}"
-          if [ -n "$SIG_FILE" ] && [ -f "$SIG_FILE" ]; then
-            SIG_CONTENT=$(cat "$SIG_FILE")
-            echo "SIGNATURE=$SIG_CONTENT" >> $GITHUB_OUTPUT
-          else
-            echo "WARNING: No signature file found"
-            echo "SIGNATURE=" >> $GITHUB_OUTPUT
-          fi
 
       - name: Update latest.json
         shell: bash
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          INSTALLER_NAME="${{ steps.artifacts.outputs.INSTALLER_NAME }}"
-          SIG="${{ steps.sig.outputs.SIGNATURE }}"
+          PORTABLE_NAME="${{ steps.artifacts.outputs.PORTABLE_NAME }}"
 
           cat > updates/latest.json << EOF
           {
@@ -111,8 +70,7 @@ jobs:
             "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "platforms": {
               "windows-x86_64": {
-                "url": "https://github.com/${{ github.repository }}/releases/download/v$VERSION/$INSTALLER_NAME",
-                "signature": "$SIG"
+                "url": "https://github.com/${{ github.repository }}/releases/download/v$VERSION/$PORTABLE_NAME"
               }
             }
           }
@@ -128,6 +86,11 @@ jobs:
           git commit -m "chore: update latest.json for v${{ steps.version.outputs.VERSION }}" || true
           git push origin main
 
+      - name: Rename portable exe
+        shell: powershell
+        run: |
+          Copy-Item "${{ steps.artifacts.outputs.PORTABLE_EXE }}" "${{ steps.artifacts.outputs.PORTABLE_NAME }}"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -135,9 +98,8 @@ jobs:
           body: |
             ## NOVA STREAM v${{ steps.version.outputs.VERSION }}
 
-            Auto-built release. Download the installer below.
+            Download the portable exe below — no installation needed.
           files: |
-            ${{ steps.artifacts.outputs.INSTALLER }}
-            ${{ steps.artifacts.outputs.SETUP_EXE }}
+            ${{ steps.artifacts.outputs.PORTABLE_NAME }}
           draft: false
           prerelease: false

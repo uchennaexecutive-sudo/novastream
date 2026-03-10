@@ -34,58 +34,66 @@ function compareVersions(a, b) {
 }
 
 function Root() {
-  const [updateInfo, setUpdateInfo] = useState(null)
-  const [showUpdateToast, setShowUpdateToast] = useState(false)
+  // 'idle' | 'downloading' | 'ready' | 'error'
+  const [updateState, setUpdateState] = useState('idle')
+  const [updateVersion, setUpdateVersion] = useState(null)
+  const [updateNotes, setUpdateNotes] = useState(null)
 
   useEffect(() => {
     if (!isTauri) return
 
-    async function checkUpdates() {
+    async function checkAndDownload() {
       try {
-        // Try Tauri updater first (works if raw.githubusercontent.com is reachable)
-        const { check } = await import('@tauri-apps/plugin-updater')
-        const update = await check()
-        if (update?.available) {
-          setUpdateInfo({ version: update.version, update, notes: update.body })
-          setShowUpdateToast(true)
-          return
-        }
-      } catch (e) {
-        console.log('Tauri updater failed, trying GitHub API fallback:', e)
-      }
-
-      // Fallback: fetch update info via GitHub API (works on restricted networks)
-      try {
+        // Fetch update info from GitHub API
         const res = await fetch(UPDATE_API, {
           headers: { 'Accept': 'application/vnd.github.v3.raw' }
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
 
-        if (data.version && compareVersions(APP_VERSION, data.version) < 0) {
-          setUpdateInfo({
-            version: data.version,
-            notes: data.notes,
-            downloadUrl: data.platforms?.['windows-x86_64']?.url,
-            update: null, // no Tauri update object — will use browser download
-          })
-          setShowUpdateToast(true)
+        if (!data.version || compareVersions(APP_VERSION, data.version) >= 0) {
+          return // No update available
         }
-      } catch (e2) {
-        console.log('GitHub API update check also failed:', e2)
+
+        const downloadUrl = data.platforms?.['windows-x86_64']?.url
+        if (!downloadUrl) return
+
+        setUpdateVersion(data.version)
+        setUpdateNotes(data.notes)
+        setUpdateState('downloading')
+
+        // Silently download the update via Rust backend
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('download_update', { url: downloadUrl })
+
+        // Download complete — show restart prompt
+        setUpdateState('ready')
+      } catch (e) {
+        console.log('Update check/download failed:', e)
+        setUpdateState('error')
       }
     }
 
-    setTimeout(checkUpdates, 3000)
+    setTimeout(checkAndDownload, 3000)
   }, [])
+
+  const handleRestart = async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('apply_update')
+    } catch (e) {
+      console.error('Failed to apply update:', e)
+    }
+  }
 
   return (
     <React.StrictMode>
       <App />
-      {showUpdateToast && (
+      {updateState === 'ready' && (
         <UpdateToast
-          updateInfo={updateInfo}
-          onDismiss={() => setShowUpdateToast(false)}
+          version={updateVersion}
+          notes={updateNotes}
+          onRestart={handleRestart}
         />
       )}
     </React.StrictMode>
