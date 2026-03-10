@@ -17,11 +17,11 @@ import useAppStore from './store/useAppStore'
 export default function App() {
   const searchOpen = useAppStore(s => s.searchOpen)
   const [showIntro, setShowIntro] = useState(
-    !localStorage.getItem('nova-intro-shown')
+    !sessionStorage.getItem('nova-intro-shown')
   )
 
   const handleIntroComplete = () => {
-    localStorage.setItem('nova-intro-shown', 'true')
+    sessionStorage.setItem('nova-intro-shown', 'true')
     setShowIntro(false)
   }
 

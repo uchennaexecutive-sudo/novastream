@@ -18,7 +18,8 @@ export const addToWatchlist = async (item) => {
     title: item.title,
     poster_path: item.poster_path,
     user_id: 'local',
-  })
+    added_at: new Date().toISOString(),
+  }, { onConflict: 'tmdb_id,user_id' })
   return data
 }
 

@@ -1,0 +1,118 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npx tauri build
+
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Find build artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          # Find the NSIS installer zip (Tauri v2 default for Windows)
+          NSIS_ZIP=$(find src-tauri/target/release/bundle/nsis -name "*.nsis.zip" 2>/dev/null | head -1)
+          NSIS_SIG=$(find src-tauri/target/release/bundle/nsis -name "*.nsis.zip.sig" 2>/dev/null | head -1)
+
+          # Fallback to MSI if no NSIS
+          if [ -z "$NSIS_ZIP" ]; then
+            NSIS_ZIP=$(find src-tauri/target/release/bundle/msi -name "*.msi.zip" 2>/dev/null | head -1)
+            NSIS_SIG=$(find src-tauri/target/release/bundle/msi -name "*.msi.zip.sig" 2>/dev/null | head -1)
+          fi
+
+          echo "INSTALLER=$NSIS_ZIP" >> $GITHUB_OUTPUT
+          echo "SIGNATURE=$NSIS_SIG" >> $GITHUB_OUTPUT
+          echo "INSTALLER_NAME=$(basename $NSIS_ZIP)" >> $GITHUB_OUTPUT
+
+          # Also grab standalone exe for manual download
+          SETUP_EXE=$(find src-tauri/target/release/bundle/nsis -name "*.exe" 2>/dev/null | head -1)
+          echo "SETUP_EXE=$SETUP_EXE" >> $GITHUB_OUTPUT
+
+      - name: Read signature
+        id: sig
+        shell: bash
+        run: |
+          SIG_CONTENT=$(cat "${{ steps.artifacts.outputs.SIGNATURE }}")
+          echo "SIGNATURE=$SIG_CONTENT" >> $GITHUB_OUTPUT
+
+      - name: Update latest.json
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          INSTALLER_NAME="${{ steps.artifacts.outputs.INSTALLER_NAME }}"
+          SIG="${{ steps.sig.outputs.SIGNATURE }}"
+
+          cat > updates/latest.json << ENDJSON
+          {
+            "version": "$VERSION",
+            "notes": "v$VERSION — Auto-release",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/v$VERSION/$INSTALLER_NAME",
+                "signature": "$SIG"
+              }
+            }
+          }
+          ENDJSON
+
+      - name: Commit updated latest.json
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout main
+          git add updates/latest.json
+          git commit -m "chore: update latest.json for v${{ steps.version.outputs.VERSION }}" || true
+          git push origin main
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "NOVA STREAM v${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## NOVA STREAM v${{ steps.version.outputs.VERSION }}
+
+            Auto-built release. Download the installer below.
+          files: |
+            ${{ steps.artifacts.outputs.INSTALLER }}
+            ${{ steps.artifacts.outputs.SETUP_EXE }}
+          draft: false
+          prerelease: false
