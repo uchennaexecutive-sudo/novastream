@@ -39,8 +39,14 @@ export default function Sidebar() {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 mb-8 h-11 overflow-hidden whitespace-nowrap">
+      {/* Logo — matches TopBar height (h-14 = 56px) for seamless corner */}
+      <div
+        className="flex items-center gap-2.5 px-4 mb-4 overflow-hidden whitespace-nowrap flex-shrink-0"
+        style={{
+          height: 56,
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
         <div
           className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-display font-bold text-lg"
           style={{
@@ -61,7 +67,7 @@ export default function Sidebar() {
               exit={{ opacity: 0, x: -8 }}
               transition={{ duration: 0.2 }}
             >
-              NOVA STREAM
+              <span style={{ color: 'var(--accent)' }}>NOVA</span> STREAM
             </motion.span>
           )}
         </AnimatePresence>

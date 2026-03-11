@@ -14,11 +14,12 @@ import React, { useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import UpdateToast from './components/UI/UpdateToast'
+import useAppStore from './store/useAppStore'
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
 
 // Current app version — must match tauri.conf.json
-const APP_VERSION = '1.0.5'
+const APP_VERSION = '1.0.6'
 
 // GitHub API endpoint (api.github.com works even when raw.githubusercontent.com is blocked)
 const UPDATE_API = 'https://api.github.com/repos/uchennaexecutive-sudo/novastream/contents/updates/latest.json'
@@ -33,17 +34,21 @@ function compareVersions(a, b) {
   return 0
 }
 
+// Export version so Settings can read it
+export { APP_VERSION }
+
 function Root() {
-  // 'idle' | 'downloading' | 'ready' | 'error'
-  const [updateState, setUpdateState] = useState('idle')
-  const [updateVersion, setUpdateVersion] = useState(null)
-  const [updateNotes, setUpdateNotes] = useState(null)
+  const setUpdateState = useAppStore(s => s.setUpdateState)
+  const setUpdateInfo = useAppStore(s => s.setUpdateInfo)
+  const updateState = useAppStore(s => s.updateState)
+  const updateVersion = useAppStore(s => s.updateVersion)
+  const updateNotes = useAppStore(s => s.updateNotes)
 
   useEffect(() => {
-    if (!isTauri) return
-
     async function checkAndDownload() {
       try {
+        setUpdateState('checking')
+
         // Fetch update info from GitHub API
         const res = await fetch(UPDATE_API, {
           headers: { 'Accept': 'application/vnd.github.v3.raw' }
@@ -52,14 +57,24 @@ function Root() {
         const data = await res.json()
 
         if (!data.version || compareVersions(APP_VERSION, data.version) >= 0) {
-          return // No update available
+          setUpdateState('up-to-date')
+          return
+        }
+
+        setUpdateInfo(data.version, data.notes)
+
+        if (!isTauri) {
+          // In browser mode, we can't download — just flag that an update exists
+          setUpdateState('ready')
+          return
         }
 
         const downloadUrl = data.platforms?.['windows-x86_64']?.url
-        if (!downloadUrl) return
+        if (!downloadUrl) {
+          setUpdateState('up-to-date')
+          return
+        }
 
-        setUpdateVersion(data.version)
-        setUpdateNotes(data.notes)
         setUpdateState('downloading')
 
         // Silently download the update via Rust backend
@@ -89,7 +104,7 @@ function Root() {
   return (
     <React.StrictMode>
       <App />
-      {updateState === 'ready' && (
+      {updateState === 'ready' && isTauri && (
         <UpdateToast
           version={updateVersion}
           notes={updateNotes}

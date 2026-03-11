@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import useAppStore from '../store/useAppStore'
 import { THEMES } from '../themes'
 import ThemeCard from '../components/UI/ThemeCard'
+import { APP_VERSION } from '../main'
 
 function Toggle({ label, value, onChange }) {
   return (
@@ -26,6 +27,105 @@ function Toggle({ label, value, onChange }) {
   )
 }
 
+function UpdateStatusSection() {
+  const updateState = useAppStore(s => s.updateState)
+  const updateVersion = useAppStore(s => s.updateVersion)
+
+  const statusConfig = {
+    'idle': { label: 'Checking for updates...', icon: '🔄', color: 'var(--text-muted)', progress: 10, animate: true },
+    'checking': { label: 'Checking for updates...', icon: '🔍', color: 'var(--text-muted)', progress: 25, animate: true },
+    'downloading': { label: `Downloading v${updateVersion || '?'}...`, icon: '⬇', color: 'var(--accent)', progress: 60, animate: true },
+    'ready': { label: `v${updateVersion} ready — restart to apply`, icon: '🚀', color: '#22c55e', progress: 100, animate: false },
+    'up-to-date': { label: 'You\'re up to date', icon: '✓', color: '#22c55e', progress: 100, animate: false },
+    'error': { label: 'Update check failed', icon: '⚠', color: '#f87171', progress: 0, animate: false },
+  }
+
+  const config = statusConfig[updateState] || statusConfig['idle']
+
+  return (
+    <div
+      className="rounded-2xl p-5"
+      style={{
+        background: 'var(--bg-glass)',
+        border: '1px solid var(--border)',
+        backdropFilter: 'blur(20px)',
+        boxShadow: 'var(--card-shadow), var(--inner-glow)',
+      }}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <span className="text-xl">{config.icon}</span>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: config.color }}>
+              {config.label}
+            </p>
+            <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+              Current: v{APP_VERSION}
+            </p>
+          </div>
+        </div>
+
+        {updateState === 'up-to-date' && (
+          <div
+            className="px-3 py-1.5 rounded-xl text-xs font-bold"
+            style={{
+              background: 'rgba(34, 197, 94, 0.15)',
+              color: '#22c55e',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+            }}
+          >
+            Latest
+          </div>
+        )}
+
+        {updateState === 'ready' && (
+          <motion.div
+            className="px-3 py-1.5 rounded-xl text-xs font-bold"
+            style={{
+              background: 'rgba(34, 197, 94, 0.15)',
+              color: '#22c55e',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+            }}
+            animate={{ opacity: [1, 0.5, 1] }}
+            transition={{ repeat: Infinity, duration: 2 }}
+          >
+            Restart Required
+          </motion.div>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      <div
+        className="h-1.5 rounded-full overflow-hidden"
+        style={{ background: 'var(--bg-elevated)' }}
+      >
+        <motion.div
+          className="h-full rounded-full"
+          style={{
+            background: updateState === 'error'
+              ? '#f87171'
+              : updateState === 'up-to-date' || updateState === 'ready'
+                ? '#22c55e'
+                : 'var(--accent)',
+            boxShadow: updateState === 'up-to-date' || updateState === 'ready'
+              ? '0 0 8px rgba(34, 197, 94, 0.5)'
+              : `0 0 8px var(--accent-glow)`,
+          }}
+          initial={{ width: '0%' }}
+          animate={{
+            width: `${config.progress}%`,
+            ...(config.animate ? { opacity: [0.7, 1, 0.7] } : {}),
+          }}
+          transition={{
+            width: { duration: 1, ease: 'easeOut' },
+            ...(config.animate ? { opacity: { repeat: Infinity, duration: 1.5 } } : {}),
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function Settings() {
   const preferences = useAppStore(s => s.preferences)
   const setPreference = useAppStore(s => s.setPreference)
@@ -36,6 +136,14 @@ export default function Settings() {
         ⚙ Settings
       </h1>
       <p className="text-sm mb-8" style={{ color: 'var(--text-muted)' }}>Customize your experience</p>
+
+      {/* Update Status */}
+      <section className="mb-10">
+        <h2 className="font-display font-semibold text-lg mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+          🔄 Software Update
+        </h2>
+        <UpdateStatusSection />
+      </section>
 
       {/* Theme Switcher */}
       <section className="mb-10">
@@ -118,16 +226,17 @@ export default function Settings() {
               <p className="font-display font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
                 NOVA STREAM
               </p>
-              <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>v1.0.5</p>
+              <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>v{APP_VERSION}</p>
             </div>
           </div>
           <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
             Your Universe of Stories
           </p>
           <p className="text-xs mb-3 font-mono" style={{ color: 'var(--accent)' }}>
-            v1.0.5 — Changelog
+            v{APP_VERSION} — Changelog
           </p>
           <div className="text-xs space-y-1 mb-2" style={{ color: 'var(--text-muted)' }}>
+            <p>• v1.0.6 — Update progress in Settings, fixed top-left corner layout</p>
             <p>• v1.0.5 — Fixed watchlist & history, TopBar layout, version display</p>
             <p>• v1.0.4 — Fixed black screen on launch, hardcoded API keys for CI builds</p>
             <p>• v1.0.3 — Fixed white screen caused by render-blocking font loading</p>

@@ -24,6 +24,13 @@ const useAppStore = create((set, get) => ({
 
   sidebarExpanded: false,
   setSidebarExpanded: (expanded) => set({ sidebarExpanded: expanded }),
+
+  // Update state: 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error' | 'idle'
+  updateState: 'idle',
+  updateVersion: null,
+  updateNotes: null,
+  setUpdateState: (state) => set({ updateState: state }),
+  setUpdateInfo: (version, notes) => set({ updateVersion: version, updateNotes: notes }),
 }))
 
 export default useAppStore

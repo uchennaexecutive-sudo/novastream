@@ -6,9 +6,10 @@ export default function TopBar() {
 
   return (
     <div
-      className="fixed right-0 left-[72px] h-14 flex items-center justify-between px-6"
+      className="fixed right-0 h-14 flex items-center justify-end px-6"
       style={{
         top: 0,
+        left: 72,
         background: 'var(--topbar-bg)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
@@ -17,14 +18,6 @@ export default function TopBar() {
         zIndex: 40,
       }}
     >
-      {/* Wordmark */}
-      <span
-        className="font-display font-bold text-base tracking-wider"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        <span style={{ color: 'var(--accent)' }}>NOVA</span> STREAM
-      </span>
-
       {/* Search trigger */}
       <motion.button
         onClick={() => setSearchOpen(true)}
