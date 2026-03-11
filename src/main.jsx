@@ -19,9 +19,9 @@ import useAppStore from './store/useAppStore'
 const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
 
 // Current app version — must match tauri.conf.json
-const APP_VERSION = '1.0.8'
+const APP_VERSION = '1.0.9'
 
-// GitHub API endpoint (api.github.com works even when raw.githubusercontent.com is blocked)
+// GitHub Contents API — returns raw JSON regardless of network
 const UPDATE_API = 'https://api.github.com/repos/uchennaexecutive-sudo/novastream/contents/updates/latest.json'
 
 function compareVersions(a, b) {
@@ -34,24 +34,37 @@ function compareVersions(a, b) {
   return 0
 }
 
-// Export version so Settings can read it
 export { APP_VERSION }
 
 function Root() {
   const setUpdateState = useAppStore(s => s.setUpdateState)
   const setUpdateInfo = useAppStore(s => s.setUpdateInfo)
+  const setDownloadProgress = useAppStore(s => s.setDownloadProgress)
   const updateState = useAppStore(s => s.updateState)
   const updateVersion = useAppStore(s => s.updateVersion)
   const updateNotes = useAppStore(s => s.updateNotes)
 
   useEffect(() => {
-    async function checkAndDownload() {
+    // Listen for streaming progress events from Rust
+    let unlisten = null
+    if (isTauri) {
+      import('@tauri-apps/api/event').then(({ listen }) => {
+        listen('download-progress', (event) => {
+          setDownloadProgress(event.payload)
+        }).then(fn => { unlisten = fn })
+      })
+    }
+    return () => { if (unlisten) unlisten() }
+  }, [])
+
+  useEffect(() => {
+    async function checkAndDownload(attempt = 1) {
       try {
         setUpdateState('checking')
 
-        // Fetch update info from GitHub API
         const res = await fetch(UPDATE_API, {
-          headers: { 'Accept': 'application/vnd.github.v3.raw' }
+          headers: { 'Accept': 'application/vnd.github.v3.raw' },
+          signal: AbortSignal.timeout(10000), // 10s timeout on the check
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
@@ -64,7 +77,6 @@ function Root() {
         setUpdateInfo(data.version, data.notes)
 
         if (!isTauri) {
-          // In browser mode, we can't download — just flag that an update exists
           setUpdateState('ready')
           return
         }
@@ -76,20 +88,26 @@ function Root() {
         }
 
         setUpdateState('downloading')
+        setDownloadProgress(0)
 
-        // Silently download the update via Rust backend
         const { invoke } = await import('@tauri-apps/api/core')
         await invoke('download_update', { url: downloadUrl })
 
-        // Download complete — show restart prompt
         setUpdateState('ready')
       } catch (e) {
-        console.log('Update check/download failed:', e)
-        setUpdateState('error')
+        console.log(`Update check failed (attempt ${attempt}):`, e)
+        if (attempt < 3) {
+          // Retry up to 2 more times with 8s delay
+          setTimeout(() => checkAndDownload(attempt + 1), 8000)
+        } else {
+          setUpdateState('error')
+        }
       }
     }
 
-    setTimeout(checkAndDownload, 3000)
+    // Wait 5s after launch before first check
+    const timer = setTimeout(checkAndDownload, 5000)
+    return () => clearTimeout(timer)
   }, [])
 
   const handleRestart = async () => {

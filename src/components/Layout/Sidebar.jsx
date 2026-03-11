@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
 
-const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
+const TOPBAR_HEIGHT = 56 // must match TopBar.jsx height
 
 const navItems = [
   { path: '/', label: 'Home', icon: '⌂' },
@@ -24,7 +24,7 @@ export default function Sidebar() {
 
   return (
     <motion.nav
-      className="fixed left-0 bottom-0 flex flex-col py-5 gap-1"
+      className="fixed left-0 bottom-0 flex flex-col"
       style={{
         top: 0,
         background: 'var(--sidebar-bg)',
@@ -33,17 +33,19 @@ export default function Sidebar() {
         borderRight: '1px solid var(--border)',
         boxShadow: 'var(--sidebar-shadow), var(--inner-glow)',
         zIndex: 50,
+        overflow: 'hidden',
       }}
       animate={{ width: hovered ? 240 : 72 }}
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Logo — matches TopBar height (h-14 = 56px) for seamless corner */}
+      {/* Logo — exact same height as TopBar, starts at top:0, no extra padding above */}
       <div
-        className="flex items-center gap-2.5 px-4 mb-4 overflow-hidden whitespace-nowrap flex-shrink-0"
+        className="flex items-center gap-2.5 overflow-hidden whitespace-nowrap flex-shrink-0"
         style={{
-          height: 56,
+          height: TOPBAR_HEIGHT,
+          paddingLeft: 16,
           borderBottom: '1px solid var(--border)',
         }}
       >
@@ -74,7 +76,7 @@ export default function Sidebar() {
       </div>
 
       {/* Main Nav */}
-      <div className="flex flex-col gap-0.5 flex-1 w-full px-2.5">
+      <div className="flex flex-col gap-0.5 flex-1 w-full px-2.5 pt-4">
         {navItems.map((item) => {
           const isActive = item.path === '/'
             ? location.pathname === '/'
@@ -89,7 +91,7 @@ export default function Sidebar() {
       <div className="mx-4 my-2 h-px" style={{ background: 'var(--border)' }} />
 
       {/* Bottom Nav */}
-      <div className="flex flex-col gap-0.5 w-full px-2.5 pb-2">
+      <div className="flex flex-col gap-0.5 w-full px-2.5 pb-4">
         {bottomItems.map((item) => {
           const isActive = location.pathname.startsWith(item.path)
           return (

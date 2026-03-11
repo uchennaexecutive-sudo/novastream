@@ -29,8 +29,10 @@ const useAppStore = create((set, get) => ({
   updateState: 'idle',
   updateVersion: null,
   updateNotes: null,
+  downloadProgress: 0,           // 0–100 real percentage during download
   setUpdateState: (state) => set({ updateState: state }),
   setUpdateInfo: (version, notes) => set({ updateVersion: version, updateNotes: notes }),
+  setDownloadProgress: (pct) => set({ downloadProgress: pct }),
 }))
 
 export default useAppStore

@@ -3,6 +3,7 @@
 use std::env;
 use std::fs;
 use std::process::Command;
+use tauri::Manager;
 
 #[tauri::command]
 fn minimize_window(window: tauri::Window) {
@@ -24,22 +25,58 @@ fn close_window(window: tauri::Window) {
 }
 
 #[tauri::command]
-async fn download_update(url: String) -> Result<String, String> {
+async fn download_update(app: tauri::AppHandle, url: String) -> Result<String, String> {
     let current_exe = env::current_exe().map_err(|e| e.to_string())?;
     let update_dir = current_exe.parent().ok_or("No parent dir")?.join("_update");
-
-    // Create update directory
     fs::create_dir_all(&update_dir).map_err(|e| e.to_string())?;
-
     let update_path = update_dir.join("nova-stream.exe");
 
-    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    // Build client with connect + read timeouts
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
     if !response.status().is_success() {
         return Err(format!("Download failed: HTTP {}", response.status()));
     }
 
-    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-    tokio::fs::write(&update_path, &bytes).await.map_err(|e| e.to_string())?;
+    // Get content length for progress reporting
+    let total = response.content_length().unwrap_or(0);
+    let mut downloaded: u64 = 0;
+    let mut file_bytes: Vec<u8> = if total > 0 {
+        Vec::with_capacity(total as usize)
+    } else {
+        Vec::new()
+    };
+
+    // Stream chunks and emit progress events
+    let mut stream = response.bytes_stream();
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        downloaded += chunk.len() as u64;
+        file_bytes.extend_from_slice(&chunk);
+
+        if total > 0 {
+            let percent = (downloaded * 100 / total) as u8;
+            let _ = app.emit("download-progress", percent);
+        }
+    }
+
+    // Emit 100% when complete
+    let _ = app.emit("download-progress", 100u8);
+
+    tokio::fs::write(&update_path, &file_bytes)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(update_path.to_string_lossy().to_string())
 }
@@ -58,7 +95,6 @@ async fn apply_update() -> Result<(), String> {
         return Err("Update file not found".to_string());
     }
 
-    // Create a batch script that waits for the app to exit, then swaps the exe and relaunches
     let batch_path = current_exe
         .parent().ok_or("No parent dir")?
         .join("_update.bat");
@@ -68,7 +104,7 @@ async fn apply_update() -> Result<(), String> {
          timeout /t 2 /nobreak >nul\r\n\
          copy /y \"{}\" \"{}\" >nul\r\n\
          rmdir /s /q \"{}\" >nul 2>&1\r\n\
-         start \"\" \"{}\" \r\n\
+         start \"\" \"{}\"\r\n\
          del \"%~f0\" >nul 2>&1\r\n",
         update_path,
         current_path,
@@ -78,14 +114,12 @@ async fn apply_update() -> Result<(), String> {
 
     fs::write(&batch_path, &script).map_err(|e| e.to_string())?;
 
-    // Launch the batch script detached
     Command::new("cmd")
         .args(["/C", "start", "/min", "", &batch_path.to_string_lossy()])
         .spawn()
         .map_err(|e| e.to_string())?;
 
-    // Exit the app
-    std::process::exit(0);
+    std::process::exit(0)
 }
 
 fn main() {

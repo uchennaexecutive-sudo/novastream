@@ -30,17 +30,25 @@ function Toggle({ label, value, onChange }) {
 function UpdateStatusSection() {
   const updateState = useAppStore(s => s.updateState)
   const updateVersion = useAppStore(s => s.updateVersion)
+  const downloadProgress = useAppStore(s => s.downloadProgress)
 
+  // For downloading state, use real progress from Rust stream; otherwise use fixed values
   const statusConfig = {
-    'idle': { label: 'Checking for updates...', icon: '🔄', color: 'var(--text-muted)', progress: 10, animate: true },
-    'checking': { label: 'Checking for updates...', icon: '🔍', color: 'var(--text-muted)', progress: 25, animate: true },
-    'downloading': { label: `Downloading v${updateVersion || '?'}...`, icon: '⬇', color: 'var(--accent)', progress: 60, animate: true },
-    'ready': { label: `v${updateVersion} ready — restart to apply`, icon: '🚀', color: '#22c55e', progress: 100, animate: false },
-    'up-to-date': { label: 'You\'re up to date', icon: '✓', color: '#22c55e', progress: 100, animate: false },
-    'error': { label: 'Update check failed', icon: '⚠', color: '#f87171', progress: 0, animate: false },
+    'idle':        { label: 'Checking for updates...', icon: '🔄', color: 'var(--text-muted)', animate: true },
+    'checking':    { label: 'Checking for updates...', icon: '🔍', color: 'var(--text-muted)', animate: true },
+    'downloading': { label: `Downloading v${updateVersion || '?'}... ${downloadProgress}%`, icon: '⬇', color: 'var(--accent)', animate: false },
+    'ready':       { label: `v${updateVersion} ready — restart to apply`, icon: '🚀', color: '#22c55e', animate: false },
+    'up-to-date':  { label: "You're up to date", icon: '✓', color: '#22c55e', animate: false },
+    'error':       { label: 'Update check failed — retrying...', icon: '⚠', color: '#f87171', animate: false },
   }
 
   const config = statusConfig[updateState] || statusConfig['idle']
+
+  // Real progress value for the bar
+  const barProgress = updateState === 'downloading' ? downloadProgress
+    : updateState === 'ready' || updateState === 'up-to-date' ? 100
+    : updateState === 'checking' || updateState === 'idle' ? 20
+    : 0
 
   return (
     <div
@@ -109,15 +117,15 @@ function UpdateStatusSection() {
                 : 'var(--accent)',
             boxShadow: updateState === 'up-to-date' || updateState === 'ready'
               ? '0 0 8px rgba(34, 197, 94, 0.5)'
-              : `0 0 8px var(--accent-glow)`,
+              : '0 0 8px var(--accent-glow)',
           }}
           initial={{ width: '0%' }}
           animate={{
-            width: `${config.progress}%`,
+            width: `${barProgress}%`,
             ...(config.animate ? { opacity: [0.7, 1, 0.7] } : {}),
           }}
           transition={{
-            width: { duration: 1, ease: 'easeOut' },
+            width: { duration: updateState === 'downloading' ? 0.3 : 1, ease: 'easeOut' },
             ...(config.animate ? { opacity: { repeat: Infinity, duration: 1.5 } } : {}),
           }}
         />
@@ -236,6 +244,7 @@ export default function Settings() {
             v{APP_VERSION} — Changelog
           </p>
           <div className="text-xs space-y-1 mb-2" style={{ color: 'var(--text-muted)' }}>
+            <p>• v1.0.9 — Better update system (streaming progress, retries, timeouts), sidebar alignment</p>
             <p>• v1.0.8 — Fixed sidebar/TopBar alignment (removed bad Tauri offset)</p>
             <p>• v1.0.7 — Fixed sidebar/TopBar vertical alignment</p>
             <p>• v1.0.6 — Update progress in Settings, fixed top-left corner layout</p>
