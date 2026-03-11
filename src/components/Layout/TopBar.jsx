@@ -6,10 +6,11 @@ export default function TopBar() {
 
   return (
     <div
-      className="fixed right-0 h-14 flex items-center justify-end px-6"
+      className="fixed right-0 flex items-center justify-end px-6"
       style={{
         top: 0,
         left: 72,
+        height: 56,
         background: 'var(--topbar-bg)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
@@ -18,7 +19,6 @@ export default function TopBar() {
         zIndex: 40,
       }}
     >
-      {/* Search trigger */}
       <motion.button
         onClick={() => setSearchOpen(true)}
         className="flex items-center gap-3 px-4 py-2 rounded-xl text-sm"

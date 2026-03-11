@@ -34,10 +34,6 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', handler)
   }, [setSearchOpen])
 
-  // In Tauri: TitleBar(32) + TopBar(56) = 88px top offset
-  // In browser: TopBar(56) = 56px top offset
-  const mainPaddingTop = isTauri ? 88 : 56
-
   return (
     <div className="min-h-screen relative" style={{ background: 'var(--bg-base)' }}>
       <BackgroundOrbs />
@@ -45,7 +41,7 @@ export default function Layout() {
       <Sidebar />
       <main
         className="relative ml-[72px] min-h-screen"
-        style={{ zIndex: 1, paddingTop: mainPaddingTop }}
+        style={{ zIndex: 1, paddingTop: 56 }}
       >
         <AnimatePresence mode="wait">
           <motion.div

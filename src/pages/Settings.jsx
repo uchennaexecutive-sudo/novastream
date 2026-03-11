@@ -236,6 +236,7 @@ export default function Settings() {
             v{APP_VERSION} — Changelog
           </p>
           <div className="text-xs space-y-1 mb-2" style={{ color: 'var(--text-muted)' }}>
+            <p>• v1.0.8 — Fixed sidebar/TopBar alignment (removed bad Tauri offset)</p>
             <p>• v1.0.7 — Fixed sidebar/TopBar vertical alignment</p>
             <p>• v1.0.6 — Update progress in Settings, fixed top-left corner layout</p>
             <p>• v1.0.5 — Fixed watchlist & history, TopBar layout, version display</p>
