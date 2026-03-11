@@ -52,6 +52,22 @@ export const getSeasonDetails = (seriesId, season) =>
 export const searchMulti = (query) =>
   tmdb.get('/search/multi', { params: { query } }).then(r => r.data.results)
 
+// Dedicated anime lookup: searches /search/tv which is more reliable than /search/multi for anime titles
+export const searchAnimeOnTMDB = async (englishTitle, romajiTitle) => {
+  const tryTitle = async (title) => {
+    if (!title) return null
+    try {
+      const res = await tmdb.get('/search/tv', { params: { query: title } })
+      const results = res.data.results || []
+      return results.length > 0 ? results[0] : null
+    } catch {
+      return null
+    }
+  }
+  const hit = await tryTitle(englishTitle) || await tryTitle(romajiTitle)
+  return hit ? { tmdbId: hit.id, mediaType: 'tv', title: hit.name } : null
+}
+
 export const getImages = (type, id) =>
   tmdb.get(`/${type}/${id}/images`).then(r => r.data)
 

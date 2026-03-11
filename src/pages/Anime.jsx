@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { getTrendingAnime, getPopularAnime, getTopRatedAnime } from '../lib/anilist'
-import { searchMulti } from '../lib/tmdb'
+import { searchAnimeOnTMDB } from '../lib/tmdb'
 
 const TABS = ['Trending', 'Popular', 'Top Rated']
 const GENRES = ['Action', 'Romance', 'Comedy', 'Horror', 'Fantasy', 'Sci-Fi', 'Slice of Life', 'Sports']
@@ -33,6 +33,8 @@ export default function Anime() {
   const [genre, setGenre] = useState(null)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
+  const [notAvailable, setNotAvailable] = useState(null)
+  const [searching, setSearching] = useState(false)
   const navigate = useNavigate()
   const observer = useRef(null)
 
@@ -92,20 +94,77 @@ export default function Anime() {
     : allAnime
 
   const handlePlay = async (item) => {
-    const title = item.title.english || item.title.romaji
+    const englishTitle = item.title.english
+    const romajiTitle = item.title.romaji
+    const displayTitle = englishTitle || romajiTitle
+    setSearching(true)
+    setNotAvailable(null)
     try {
-      const results = await searchMulti(title)
-      const match = results?.find(r => r.media_type === 'tv' || r.media_type === 'movie')
+      const match = await searchAnimeOnTMDB(englishTitle, romajiTitle)
       if (match) {
-        navigate(`/detail/${match.media_type}/${match.id}`)
+        navigate(`/detail/${match.mediaType}/${match.tmdbId}`)
+      } else {
+        console.warn('[Anime] No TMDB match for:', displayTitle)
+        setNotAvailable(displayTitle)
+        setTimeout(() => setNotAvailable(null), 4000)
       }
     } catch (err) {
       console.error('[Anime] Search error:', err)
+      setNotAvailable(displayTitle)
+      setTimeout(() => setNotAvailable(null), 4000)
+    } finally {
+      setSearching(false)
     }
   }
 
   return (
     <div className="p-6">
+      <AnimatePresence>
+        {notAvailable && (
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 24, scale: 0.95 }}
+            transition={{ duration: 0.25 }}
+            style={{
+              position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)',
+              zIndex: 9998, background: 'rgba(20,20,30,0.95)',
+              border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(16px)',
+              borderRadius: 14, padding: '14px 24px',
+              display: 'flex', alignItems: 'center', gap: 12,
+              boxShadow: '0 8px 40px rgba(0,0,0,0.6)', maxWidth: 480,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🚫</span>
+            <div>
+              <p style={{ color: '#fff', fontWeight: 600, fontSize: 14, margin: 0 }}>
+                Stream not available for this title
+              </p>
+              <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, margin: '2px 0 0' }}>
+                "{notAvailable}" could not be found on the streaming catalog.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {searching && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 9997,
+              background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin"
+                style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+              <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontFamily: 'monospace' }}>Finding stream...</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <h1 className="font-display font-bold text-3xl mb-1" style={{ color: 'var(--text-primary)' }}>
         ⚔ Anime
       </h1>
