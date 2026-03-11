@@ -6,6 +6,8 @@ import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import useAppStore from '../../store/useAppStore'
 
+const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
+
 const pageVariants = {
   initial: { opacity: 0, y: 20, filter: 'blur(4px)' },
   animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
@@ -32,12 +34,19 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', handler)
   }, [setSearchOpen])
 
+  // In Tauri: TitleBar(32) + TopBar(56) = 88px top offset
+  // In browser: TopBar(56) = 56px top offset
+  const mainPaddingTop = isTauri ? 88 : 56
+
   return (
     <div className="min-h-screen relative" style={{ background: 'var(--bg-base)' }}>
       <BackgroundOrbs />
       <TopBar />
       <Sidebar />
-      <main className="relative ml-[72px] min-h-screen pt-14" style={{ zIndex: 1 }}>
+      <main
+        className="relative ml-[72px] min-h-screen"
+        style={{ zIndex: 1, paddingTop: mainPaddingTop }}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}

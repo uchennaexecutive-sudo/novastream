@@ -19,7 +19,7 @@ import useAppStore from './store/useAppStore'
 const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
 
 // Current app version — must match tauri.conf.json
-const APP_VERSION = '1.0.6'
+const APP_VERSION = '1.0.7'
 
 // GitHub API endpoint (api.github.com works even when raw.githubusercontent.com is blocked)
 const UPDATE_API = 'https://api.github.com/repos/uchennaexecutive-sudo/novastream/contents/updates/latest.json'
