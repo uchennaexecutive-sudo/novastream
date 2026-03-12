@@ -3,15 +3,13 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Hls from 'hls.js'
 import { Maximize, Minimize, Pause, Play, Volume2, VolumeX, X } from 'lucide-react'
-import {
-  CONSUMET_BASE_URL,
-  CONSUMET_INSTANCES,
-  getAnimeEpisodes,
-  getAnimeStream,
-  searchAnime,
-} from '../../lib/consumet'
+import { ANIWATCH_BASE_URL, getAnimeEpisodes, getAnimeStream, searchAnime } from '../../lib/consumet'
 
-const SERVER_TABS = ['GogoAnime']
+const SERVERS = [
+  { id: 'hd-1', label: 'HD-1' },
+  { id: 'hd-2', label: 'HD-2' },
+  { id: 'hd-3', label: 'HD-3' },
+]
 
 export default function AnimePlayer({ animeTitle, season, episode, backdrop, onClose }) {
   const videoRef = useRef(null)
@@ -20,20 +18,19 @@ export default function AnimePlayer({ animeTitle, season, episode, backdrop, onC
   const [streamUrl, setStreamUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [instanceIndex, setInstanceIndex] = useState(0)
+  const [serverIndex, setServerIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
-  const currentBaseUrl = CONSUMET_INSTANCES[instanceIndex] || CONSUMET_BASE_URL
-
-  const currentInstanceLabel = useMemo(() => {
+  const currentServer = SERVERS[serverIndex] || SERVERS[0]
+  const apiHost = useMemo(() => {
     try {
-      return new URL(currentBaseUrl).host
+      return new URL(ANIWATCH_BASE_URL).host
     } catch {
-      return currentBaseUrl
+      return ANIWATCH_BASE_URL
     }
-  }, [currentBaseUrl])
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -44,21 +41,21 @@ export default function AnimePlayer({ animeTitle, season, episode, backdrop, onC
       setStreamUrl('')
 
       try {
-        const result = await searchAnime(animeTitle, currentBaseUrl)
-        if (!result?.id) throw new Error('Anime not found')
+        const anime = await searchAnime(animeTitle)
+        if (!anime?.id) throw new Error('Anime not found')
 
-        const episodes = await getAnimeEpisodes(result.id, currentBaseUrl)
+        const episodes = await getAnimeEpisodes(anime.id)
         const targetEpisode = episodes.find(item => Number(item.number) === Number(episode))
-        if (!targetEpisode?.id) throw new Error('Episode not found')
+        if (!targetEpisode?.episodeId) throw new Error('Episode not found')
 
-        const url = await getAnimeStream(targetEpisode.id, currentBaseUrl)
+        const url = await getAnimeStream(targetEpisode.episodeId, currentServer.id)
         if (!url) throw new Error('Stream not found')
 
         if (!cancelled) {
           setStreamUrl(url)
           setLoading(false)
         }
-      } catch (err) {
+      } catch {
         if (!cancelled) {
           setError('Could not load stream')
           setLoading(false)
@@ -68,7 +65,7 @@ export default function AnimePlayer({ animeTitle, season, episode, backdrop, onC
 
     resolveStream()
     return () => { cancelled = true }
-  }, [animeTitle, currentBaseUrl, episode, season])
+  }, [animeTitle, currentServer.id, episode, season])
 
   useEffect(() => {
     const video = videoRef.current
@@ -92,14 +89,8 @@ export default function AnimePlayer({ animeTitle, season, episode, backdrop, onC
           setError('Could not load stream')
         }
       })
-
-      return () => {
-        hls.destroy()
-        hlsRef.current = null
-      }
-    }
-
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      return () => hls.destroy()
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = streamUrl
       video.play().catch(() => {})
     }
@@ -113,7 +104,6 @@ export default function AnimePlayer({ animeTitle, season, episode, backdrop, onC
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement))
-
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
@@ -150,7 +140,7 @@ export default function AnimePlayer({ animeTitle, season, episode, backdrop, onC
   }
 
   const tryNextServer = () => {
-    setInstanceIndex(index => (index + 1) % CONSUMET_INSTANCES.length)
+    setServerIndex(index => (index + 1) % SERVERS.length)
   }
 
   return createPortal(
@@ -223,17 +213,18 @@ export default function AnimePlayer({ animeTitle, season, episode, backdrop, onC
             }}
           >
             <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
-              {SERVER_TABS.map(tab => (
+              {SERVERS.map((server, index) => (
                 <button
-                  key={tab}
+                  key={server.id}
+                  onClick={() => setServerIndex(index)}
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap"
                   style={{
-                    background: 'var(--accent)',
+                    background: index === serverIndex ? 'var(--accent)' : 'rgba(255,255,255,0.08)',
                     color: '#fff',
-                    boxShadow: '0 0 16px var(--accent-glow)',
+                    boxShadow: index === serverIndex ? '0 0 16px var(--accent-glow)' : 'none',
                   }}
                 >
-                  {tab}
+                  {server.label}
                 </button>
               ))}
             </div>
@@ -271,13 +262,13 @@ export default function AnimePlayer({ animeTitle, season, episode, backdrop, onC
               <div className="flex flex-col items-center gap-3">
                 <span className="w-10 h-10 rounded-full border-2 border-white/20 border-t-white animate-spin" />
                 <span className="text-sm text-white/60 font-mono">Loading stream...</span>
-                <span className="text-xs text-white/40">{currentInstanceLabel}</span>
+                <span className="text-xs text-white/40">{apiHost} / {currentServer.label}</span>
               </div>
             ) : error ? (
               <div className="flex flex-col items-center gap-4 text-center">
                 <p className="text-2xl font-display text-white">{error}</p>
                 <p className="text-sm text-white/50">
-                  Consumet did not return a playable source from {currentInstanceLabel}.
+                  HiAnime did not return a playable source from {currentServer.label}.
                 </p>
                 <button
                   onClick={tryNextServer}
