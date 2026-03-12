@@ -14,3 +14,11 @@ export const getSeriesEmbeds = (id, s = 1, e = 1) => [
   `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`,
   `https://moviesapi.club/tv/${id}-${s}-${e}`,
 ]
+
+export const getAnimeEmbeds = (id, s = 1, e = 1) => [
+  `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}`,
+  `https://www.2embed.online/embed/tv/${id}/${s}/${e}`,
+  `https://vidlink.pro/tv/${id}/${s}/${e}`,
+  `https://vidsrc.icu/embed/tv?tmdb=${id}&season=${s}&episode=${e}`,
+  `https://godriveplayer.com/player.php?tmdb=${id}&season=${s}&episode=${e}`,
+]

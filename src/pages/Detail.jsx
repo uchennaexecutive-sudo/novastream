@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import ReactPlayer from 'react-player'
 import { getDetails, imgOriginal, imgW500 } from '../lib/tmdb'
@@ -13,6 +13,7 @@ import { addToWatchlist, isInWatchlist } from '../lib/supabase'
 
 export default function Detail() {
   const { type, id } = useParams()
+  const location = useLocation()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [playerOpen, setPlayerOpen] = useState(false)
@@ -48,6 +49,7 @@ export default function Detail() {
   const genres = data.genres || []
   const numSeasons = data.number_of_seasons || 0
   const year = (data.release_date || data.first_air_date || '').slice(0, 4)
+  const isAnime = Boolean(location.state?.isAnime)
 
   const handleWatchlist = async () => {
     await addToWatchlist({
@@ -313,6 +315,7 @@ export default function Detail() {
         posterPath={data.poster_path}
         season={playSeason}
         episode={playEpisode}
+        isAnime={isAnime}
       />
     </div>
   )

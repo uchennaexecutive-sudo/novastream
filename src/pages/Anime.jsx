@@ -102,7 +102,9 @@ export default function Anime() {
     try {
       const match = await searchAnimeOnTMDB(englishTitle, romajiTitle)
       if (match) {
-        navigate(`/detail/${match.mediaType}/${match.tmdbId}`)
+        navigate(`/detail/${match.mediaType}/${match.tmdbId}`, {
+          state: { isAnime: true },
+        })
       } else {
         console.warn('[Anime] No TMDB match for:', displayTitle)
         setNotAvailable(displayTitle)

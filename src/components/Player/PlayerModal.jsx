@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Maximize, Minimize, X } from 'lucide-react'
-import { getMovieEmbeds, getSeriesEmbeds } from '../../lib/embeds'
+import { getAnimeEmbeds, getMovieEmbeds, getSeriesEmbeds } from '../../lib/embeds'
 import { addToHistory } from '../../lib/supabase'
 
 // Human-readable server labels
-const SERVER_LABELS = [
+const DEFAULT_SERVER_LABELS = [
   'VidSrc XYZ',
   'VidSrc Net',
   'VidSrc Me',
@@ -15,7 +15,15 @@ const SERVER_LABELS = [
   'NontonFilm',
 ]
 
-export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title, posterPath, season, episode }) {
+const ANIME_SERVER_LABELS = [
+  'VidSrc CC',
+  '2Embed',
+  'VidLink',
+  'VidSrc ICU',
+  'GoDrive',
+]
+
+export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title, posterPath, season, episode, isAnime = false }) {
   const [sourceIndex, setSourceIndex] = useState(0)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -28,10 +36,13 @@ export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title,
 
   const embeds = mediaType === 'movie'
     ? getMovieEmbeds(tmdbId)
-    : getSeriesEmbeds(tmdbId, season, episode)
+    : isAnime
+      ? getAnimeEmbeds(tmdbId, season, episode)
+      : getSeriesEmbeds(tmdbId, season, episode)
 
   const currentUrl = embeds[sourceIndex]
-  const serverLabel = SERVER_LABELS[sourceIndex] || `Server ${sourceIndex + 1}`
+  const serverLabels = isAnime ? ANIME_SERVER_LABELS : DEFAULT_SERVER_LABELS
+  const serverLabel = serverLabels[sourceIndex] || `Server ${sourceIndex + 1}`
 
   // ─── Ad blocking: re-focus window when iframe steals focus (ad popup) ───
   useEffect(() => {
@@ -249,7 +260,7 @@ export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title,
                       {i === sourceIndex && loading && (
                         <span className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                       )}
-                      Server {i + 1}
+                      {serverLabels[i] || `Server ${i + 1}`}
                     </button>
                   ))}
                 </div>
@@ -286,7 +297,7 @@ export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title,
                   className="px-5 py-2.5 rounded-xl text-sm font-medium"
                   style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
                 >
-                  Retry Server 1
+                  Retry {serverLabels[0] || 'Server 1'}
                 </button>
                 <a
                   href={embeds[0]}
