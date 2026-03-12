@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Hls from 'hls.js'
+import { invoke } from '@tauri-apps/api/core'
 import {
   Captions,
   Maximize,
@@ -14,7 +15,7 @@ import {
   VolumeX,
   X,
 } from 'lucide-react'
-import { ANIWATCH_BASE_URL, ANIWATCH_PROXY_URL, getAnimeEpisodes, getAnimeStream, searchAnime } from '../../lib/consumet'
+import { ANIWATCH_BASE_URL, getAnimeEpisodes, getAnimeStream, searchAnime } from '../../lib/consumet'
 import { saveProgress } from '../../lib/progress'
 
 const STREAM_SERVER = { id: 'hd-2', label: 'HD-2' }
@@ -96,7 +97,7 @@ export default function AnimePlayer({
   const [animeId, setAnimeId] = useState('')
   const [episodes, setEpisodes] = useState([])
   const [currentEpisode, setCurrentEpisode] = useState(Number(episode) || 1)
-  const [streamData, setStreamData] = useState({ rawUrl: '', proxiedUrl: '' })
+  const [streamData, setStreamData] = useState({ rawUrl: '', proxyUrl: '' })
   const [streamMode, setStreamMode] = useState('proxy')
   const [streamSources, setStreamSources] = useState([])
   const [subtitleTracks, setSubtitleTracks] = useState([])
@@ -133,13 +134,13 @@ export default function AnimePlayer({
     [episodes, currentEpisode]
   )
   const activeStreamUrl = useMemo(
-    () => streamData.rawUrl || streamData.proxiedUrl || '',
-    [streamData.rawUrl, streamData.proxiedUrl]
+    () => (streamMode === 'raw' ? streamData.rawUrl : (streamData.proxyUrl || streamData.rawUrl || '')),
+    [streamData.proxyUrl, streamData.rawUrl, streamMode]
   )
   const canFallbackToRaw = Boolean(
     streamData.rawUrl
-    && streamData.proxiedUrl
-    && streamData.rawUrl !== streamData.proxiedUrl
+    && streamData.proxyUrl
+    && streamData.rawUrl !== streamData.proxyUrl
     && streamMode !== 'raw'
   )
   const hasPrevEpisode = episodes.some(item => Number(item.number) === Number(currentEpisode) - 1)
@@ -157,7 +158,7 @@ export default function AnimePlayer({
   }
   const resetPlaybackState = () => {
     clearStartupTimer()
-    setStreamData({ rawUrl: '', proxiedUrl: '' })
+    setStreamData({ rawUrl: '', proxyUrl: '' })
     setStreamMode('proxy')
     setStreamSources([])
     setSubtitleTracks([])
@@ -395,14 +396,30 @@ export default function AnimePlayer({
       try {
         const payload = await getAnimeStream(targetEpisode.episodeId, STREAM_SERVER.id, { fresh: true })
         if (cancelled) return
-        if (!payload?.proxiedUrl && !payload?.rawUrl) throw new Error('Invalid stream')
+        if (!payload?.rawUrl) throw new Error('Invalid stream')
 
-        const captionTracks = (payload.tracks || []).filter(track => track.kind === 'captions')
+        const proxyUrl = await invoke('proxy_hls_url', { url: payload.rawUrl }).catch(() => '')
+        const captionTracks = await Promise.all(
+          (payload.tracks || [])
+            .filter(track => track.kind === 'captions')
+            .map(async (track) => {
+              const rawTrackUrl = track.file || track.url || track.rawFile || null
+              if (!rawTrackUrl) return track
+
+              const proxiedTrackUrl = await invoke('proxy_hls_url', { url: rawTrackUrl }).catch(() => rawTrackUrl)
+              return {
+                ...track,
+                rawFile: rawTrackUrl,
+                file: proxiedTrackUrl,
+                url: proxiedTrackUrl,
+              }
+            })
+        )
         setStreamData({
           rawUrl: payload.rawUrl || '',
-          proxiedUrl: payload.proxiedUrl || '',
+          proxyUrl,
         })
-        setStreamMode(payload.proxiedUrl ? 'proxy' : 'raw')
+        setStreamMode(proxyUrl ? 'proxy' : 'raw')
         setStreamSources(payload.sources || [])
         setSubtitleTracks(captionTracks)
         setSubtitleEnabled(captionTracks.length > 0)
@@ -485,29 +502,12 @@ export default function AnimePlayer({
     }
 
     if (Hls.isSupported()) {
-      const ProxyingLoader = class extends Hls.DefaultConfig.loader {
-        load(context, config, callbacks) {
-          const proxiedContext = {
-            ...context,
-            url: `${ANIWATCH_PROXY_URL}?url=${encodeURIComponent(context.url)}`,
-          }
-
-          super.load(proxiedContext, config, {
-            ...callbacks,
-            onSuccess: (response, stats, _context, networkDetails) => callbacks.onSuccess(response, stats, context, networkDetails),
-            onError: (error, _context, networkDetails, stats) => callbacks.onError(error, context, networkDetails, stats),
-            onTimeout: (stats, _context, networkDetails) => callbacks.onTimeout(stats, context, networkDetails),
-          })
-        }
-      }
-
       const hls = new Hls({
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
         lowLatencyMode: false,
         progressive: true,
         startLevel: -1,
-        loader: streamMode === 'proxy' && streamData.rawUrl ? ProxyingLoader : Hls.DefaultConfig.loader,
       })
       hlsRef.current = hls
       hls.attachMedia(video)
@@ -836,7 +836,7 @@ export default function AnimePlayer({
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs text-white/55">
                     <span>{animeTitle}</span>
-                    <span>Season {season} Episode {currentEpisodeMeta?.number || currentEpisode} | {STREAM_SERVER.label} | {streamMode === 'raw' ? 'Raw fallback' : 'Proxy'}</span>
+                    <span>Season {season} Episode {currentEpisodeMeta?.number || currentEpisode} | {STREAM_SERVER.label} | {streamMode === 'raw' ? 'Raw fallback' : 'Local proxy'}</span>
                   </div>
                 </motion.div>
               )}

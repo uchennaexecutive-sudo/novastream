@@ -9,10 +9,28 @@ use std::sync::{
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use axum::{
+    body::Body,
+    extract::{Query, State},
+    http::{header, HeaderMap, HeaderValue, Response, StatusCode},
+    routing::get,
+    Router,
+};
+use futures_util::StreamExt;
+use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
+use serde::Deserialize;
 use tauri::webview::NewWindowResponse;
 use tauri::{Emitter, Manager, WebviewUrl};
+use tower_http::cors::CorsLayer;
+use url::Url;
 
 const STREAM_CAPTURE_SCHEME: &str = "novastream-capture";
+const HLS_PROXY_BIND_ADDRESS: &str = "127.0.0.1:9876";
+const HLS_PROXY_BASE_URL: &str = "http://localhost:9876/proxy";
+const HLS_REFERER: &str = "https://hianime.to";
+const HLS_ORIGIN: &str = "https://hianime.to";
+const HLS_USER_AGENT: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 const STREAM_CAPTURE_SCRIPT: &str = r#"
 (() => {
   if (window.__NOVA_STREAM_CAPTURE__) return;
@@ -119,6 +137,16 @@ const STREAM_CAPTURE_SCRIPT: &str = r#"
 })();
 "#;
 
+#[derive(Clone)]
+struct HlsProxyState {
+    client: reqwest::Client,
+}
+
+#[derive(Deserialize)]
+struct ProxyQuery {
+    url: String,
+}
+
 #[tauri::command]
 fn minimize_window(window: tauri::Window) {
     window.minimize().unwrap();
@@ -136,6 +164,14 @@ fn toggle_maximize(window: tauri::Window) {
 #[tauri::command]
 fn close_window(window: tauri::Window) {
     window.close().unwrap();
+}
+
+#[tauri::command]
+fn proxy_hls_url(url: String) -> String {
+    format!(
+        "{HLS_PROXY_BASE_URL}?url={}",
+        utf8_percent_encode(&url, NON_ALPHANUMERIC)
+    )
 }
 
 fn capture_window_label() -> String {
@@ -235,6 +271,198 @@ async fn capture_stream(app: tauri::AppHandle, embed_url: String) -> Result<(), 
     Ok(())
 }
 
+fn parse_proxy_target(url: &str) -> Result<Url, String> {
+    Url::parse(url).or_else(|_| {
+        let decoded = percent_decode_str(url).decode_utf8_lossy();
+        Url::parse(&decoded)
+    })
+    .map_err(|e| format!("Invalid proxy URL: {e}"))
+}
+
+fn proxy_url_for(url: &Url) -> String {
+    format!(
+        "{HLS_PROXY_BASE_URL}?url={}",
+        utf8_percent_encode(url.as_str(), NON_ALPHANUMERIC)
+    )
+}
+
+fn resolve_target_url(reference: &str, base_url: &Url) -> Option<Url> {
+    if reference.starts_with("http://") || reference.starts_with("https://") {
+        Url::parse(reference).ok()
+    } else {
+        base_url.join(reference).ok()
+    }
+}
+
+fn rewrite_uri_attributes(line: &str, base_url: &Url) -> String {
+    let mut output = String::new();
+    let mut remaining = line;
+
+    while let Some(start) = remaining.find("URI=\"") {
+        let prefix = &remaining[..start];
+        output.push_str(prefix);
+        output.push_str("URI=\"");
+
+        let after_prefix = &remaining[start + 5..];
+        if let Some(end) = after_prefix.find('"') {
+            let raw_uri = &after_prefix[..end];
+            let rewritten = resolve_target_url(raw_uri, base_url)
+                .map(|url| proxy_url_for(&url))
+                .unwrap_or_else(|| raw_uri.to_string());
+            output.push_str(&rewritten);
+            output.push('"');
+            remaining = &after_prefix[end + 1..];
+        } else {
+            output.push_str(after_prefix);
+            remaining = "";
+            break;
+        }
+    }
+
+    output.push_str(remaining);
+    output
+}
+
+fn rewrite_playlist_line(line: &str, base_url: &Url) -> String {
+    let trimmed = line.trim();
+
+    if trimmed.is_empty() {
+        return line.to_string();
+    }
+
+    if trimmed.starts_with('#') {
+        return rewrite_uri_attributes(line, base_url);
+    }
+
+    resolve_target_url(trimmed, base_url)
+        .map(|url| proxy_url_for(&url))
+        .unwrap_or_else(|| line.to_string())
+}
+
+fn rewrite_playlist(body: &str, base_url: &Url) -> String {
+    body.lines()
+        .map(|line| rewrite_playlist_line(line, base_url))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn is_playlist_response(url: &Url, content_type: &str) -> bool {
+    let content_type = content_type.to_ascii_lowercase();
+    content_type.contains("mpegurl")
+        || content_type.contains("x-mpegurl")
+        || url.path().ends_with(".m3u8")
+}
+
+async fn handle_hls_proxy(
+    State(state): State<HlsProxyState>,
+    headers: HeaderMap,
+    Query(query): Query<ProxyQuery>,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let target_url = parse_proxy_target(&query.url).map_err(|error| (StatusCode::BAD_REQUEST, error))?;
+
+    let mut request = state
+        .client
+        .get(target_url.clone())
+        .header(header::REFERER, HLS_REFERER)
+        .header(header::ORIGIN, HLS_ORIGIN)
+        .header(header::USER_AGENT, HLS_USER_AGENT);
+
+    if let Some(range_header) = headers.get(header::RANGE) {
+        request = request.header(header::RANGE, range_header.clone());
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?;
+
+    let upstream_status = response.status();
+    let upstream_headers = response.headers().clone();
+    let content_type = upstream_headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+
+    if is_playlist_response(&target_url, &content_type) {
+        let playlist = response
+            .text()
+            .await
+            .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?;
+        let rewritten_playlist = rewrite_playlist(&playlist, &target_url);
+
+        let mut proxy_response = Response::new(Body::from(rewritten_playlist));
+        *proxy_response.status_mut() = upstream_status;
+        proxy_response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/vnd.apple.mpegurl"),
+        );
+        proxy_response.headers_mut().insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_static("*"),
+        );
+        proxy_response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        );
+        return Ok(proxy_response);
+    }
+
+    let stream = response.bytes_stream().map(|chunk| {
+        chunk.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error.to_string()))
+    });
+    let mut proxy_response = Response::new(Body::from_stream(stream));
+    *proxy_response.status_mut() = upstream_status;
+
+    let headers_to_copy = [
+        header::CONTENT_TYPE,
+        header::CONTENT_LENGTH,
+        header::CONTENT_RANGE,
+        header::ACCEPT_RANGES,
+        header::CACHE_CONTROL,
+        header::ETAG,
+        header::EXPIRES,
+        header::LAST_MODIFIED,
+    ];
+
+    for header_name in headers_to_copy {
+        if let Some(value) = upstream_headers.get(&header_name) {
+            proxy_response
+                .headers_mut()
+                .insert(header_name, value.clone());
+        }
+    }
+
+    proxy_response.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
+
+    Ok(proxy_response)
+}
+
+async fn start_hls_proxy() -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let app = Router::new()
+        .route("/proxy", get(handle_hls_proxy))
+        .with_state(HlsProxyState { client })
+        .layer(CorsLayer::permissive());
+
+    let listener = tokio::net::TcpListener::bind(HLS_PROXY_BIND_ADDRESS)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    axum::serve(listener, app)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn download_update(app: tauri::AppHandle, url: String) -> Result<String, String> {
     let current_exe = env::current_exe().map_err(|e| e.to_string())?;
@@ -267,7 +495,6 @@ async fn download_update(app: tauri::AppHandle, url: String) -> Result<String, S
     };
 
     let mut stream = response.bytes_stream();
-    use futures_util::StreamExt;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
@@ -330,6 +557,12 @@ async fn apply_update() -> Result<(), String> {
 }
 
 fn main() {
+    tauri::async_runtime::spawn(async {
+        if let Err(error) = start_hls_proxy().await {
+            eprintln!("HLS proxy failed: {error}");
+        }
+    });
+
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -337,6 +570,7 @@ fn main() {
             minimize_window,
             toggle_maximize,
             close_window,
+            proxy_hls_url,
             capture_stream,
             download_update,
             apply_update
