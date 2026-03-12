@@ -1,10 +1,10 @@
 {
-  "version": "1.0.18",
-  "notes": "v1.0.18 — Auto-release",
-  "pub_date": "2026-03-12T02:30:42Z",
+  "version": "1.0.19",
+  "notes": "v1.0.19 — Auto-release",
+  "pub_date": "2026-03-12T03:05:49Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/uchennaexecutive-sudo/novastream/releases/download/v1.0.18/NOVA-STREAM-1.0.18-portable.exe"
+      "url": "https://github.com/uchennaexecutive-sudo/novastream/releases/download/v1.0.19/NOVA-STREAM-1.0.19-portable.exe"
     }
   }
 }
