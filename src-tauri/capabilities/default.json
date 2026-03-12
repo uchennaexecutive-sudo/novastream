@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "allow-fetch-hls-segment",
+    "allow-fetch-hls-manifest",
     "updater:default",
     "process:default"
   ]

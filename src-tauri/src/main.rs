@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::collections::HashMap;
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -11,6 +12,7 @@ use std::sync::{
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
+use reqwest::Url;
 use tauri::ipc::Response;
 use tauri::webview::NewWindowResponse;
 use tauri::{Emitter, Manager, WebviewUrl};
@@ -142,19 +144,18 @@ fn close_window(window: tauri::Window) {
 }
 
 #[tauri::command]
-async fn fetch_hls_segment(url: String) -> Result<Response, String> {
+async fn fetch_hls_segment(url: String, headers: HashMap<String, String>) -> Result<Response, String> {
     let client = reqwest::Client::new();
-    let response = client
-        .get(&url)
-        .header("Referer", "https://hianime.to")
-        .header("Origin", "https://hianime.to")
-        .header(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        )
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut request = client.get(&url).header(
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    );
+
+    for (key, value) in &headers {
+        request = request.header(key.as_str(), value.as_str());
+    }
+
+    let response = request.send().await.map_err(|e| e.to_string())?;
 
     if !response.status().is_success() {
         return Err(format!("HLS fetch failed: HTTP {}", response.status()));
@@ -163,6 +164,81 @@ async fn fetch_hls_segment(url: String) -> Result<Response, String> {
     let bytes = response.bytes().await.map_err(|e| e.to_string())?;
 
     Ok(Response::new(bytes.to_vec()))
+}
+
+fn absolutize_reference(reference: &str, base_url: &Url) -> String {
+    base_url
+        .join(reference)
+        .map(|url| url.to_string())
+        .unwrap_or_else(|_| reference.to_string())
+}
+
+fn rewrite_uri_attributes(line: &str, base_url: &Url) -> String {
+    let mut output = String::new();
+    let mut remaining = line;
+
+    while let Some(start) = remaining.find("URI=\"") {
+        output.push_str(&remaining[..start]);
+        output.push_str("URI=\"");
+
+        let after_prefix = &remaining[start + 5..];
+        if let Some(end) = after_prefix.find('"') {
+            let raw_uri = &after_prefix[..end];
+            output.push_str(&absolutize_reference(raw_uri, base_url));
+            output.push('"');
+            remaining = &after_prefix[end + 1..];
+        } else {
+            output.push_str(after_prefix);
+            remaining = "";
+            break;
+        }
+    }
+
+    output.push_str(remaining);
+    output
+}
+
+fn rewrite_manifest_line(line: &str, base_url: &Url) -> String {
+    let trimmed = line.trim();
+
+    if trimmed.is_empty() {
+        return line.to_string();
+    }
+
+    if trimmed.starts_with('#') {
+        return rewrite_uri_attributes(line, base_url);
+    }
+
+    absolutize_reference(trimmed, base_url)
+}
+
+#[tauri::command]
+async fn fetch_hls_manifest(url: String, headers: HashMap<String, String>) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let mut request = client.get(&url).header(
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    );
+
+    for (key, value) in &headers {
+        request = request.header(key.as_str(), value.as_str());
+    }
+
+    let response = request.send().await.map_err(|e| e.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Manifest fetch failed: HTTP {}", response.status()));
+    }
+
+    let manifest_text = response.text().await.map_err(|e| e.to_string())?;
+    let base_url = Url::parse(&url).map_err(|e| e.to_string())?;
+    let rewritten = manifest_text
+        .lines()
+        .map(|line| rewrite_manifest_line(line, &base_url))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(rewritten)
 }
 
 fn capture_window_label() -> String {
@@ -476,6 +552,7 @@ fn main() {
             toggle_maximize,
             close_window,
             fetch_hls_segment,
+            fetch_hls_manifest,
             capture_stream,
             download_update,
             apply_update

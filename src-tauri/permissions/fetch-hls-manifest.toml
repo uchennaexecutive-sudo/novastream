@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-fetch-hls-manifest"
+description = "Allow fetching HLS manifests through Rust"
+commands.allow = ["fetch_hls_manifest"]

@@ -97,7 +97,7 @@ const normalizeBinaryPayload = (data) => {
   return new Uint8Array(0).buffer
 }
 
-function createTauriLoader(base) {
+function createTauriLoader(base, getHeaders) {
   const Base = base
 
   return class TauriLoader extends Base {
@@ -120,16 +120,51 @@ function createTauriLoader(base) {
       this.aborted = false
 
       const url = context.url
+      const isBlobUrl = url.startsWith('blob:')
+      const isPlaylist = url.includes('.m3u8')
       const isSegment = url.includes('.ts')
         || url.includes('.m4s')
         || url.includes('.aac')
         || url.includes('.mp4')
       const isKey = url.includes('.key') || context.type === 'key'
+      const headers = getHeaders() || {}
+
+      if (isPlaylist && !isBlobUrl) {
+        const startTime = performance.now()
+
+        invoke('fetch_hls_manifest', { url, headers })
+          .then((data) => {
+            if (this.aborted) return
+
+            const endTime = performance.now()
+            const stats = {
+              trequest: startTime,
+              tfirst: endTime,
+              tload: endTime,
+              loaded: data.length,
+              total: data.length,
+              bwEstimate: 0,
+            }
+
+            callbacks.onSuccess({ data, url }, stats, context, null)
+          })
+          .catch((err) => {
+            if (this.aborted) return
+
+            callbacks.onError(
+              { code: 0, text: err.toString() },
+              context,
+              null
+            )
+          })
+
+        return
+      }
 
       if (isSegment || isKey) {
         const startTime = performance.now()
 
-        invoke('fetch_hls_segment', { url })
+        invoke('fetch_hls_segment', { url, headers })
           .then((data) => {
             if (this.aborted) return
 
@@ -186,6 +221,7 @@ export default function AnimePlayer({
   const resumeTargetRef = useRef({ episode: Number(episode) || 1, seconds: Number(resumeAt) || 0 })
   const retryScheduledRef = useRef(false)
   const streamAttemptRef = useRef(0)
+  const hlsHeadersRef = useRef({})
   const [animeId, setAnimeId] = useState('')
   const [episodes, setEpisodes] = useState([])
   const [currentEpisode, setCurrentEpisode] = useState(Number(episode) || 1)
@@ -244,6 +280,7 @@ export default function AnimePlayer({
   }
   const resetPlaybackState = () => {
     clearStartupTimer()
+    hlsHeadersRef.current = {}
     setStreamData({ rawUrl: '' })
     setStreamSources([])
     setSubtitleTracks([])
@@ -487,10 +524,12 @@ export default function AnimePlayer({
         if (!payload?.rawUrl) throw new Error('Invalid stream')
 
         const captionTracks = (payload.tracks || []).filter(track => track.kind === 'captions')
+        hlsHeadersRef.current = payload.headers || {}
         console.info('[AnimePlayer] resolved stream', {
           animeTitle,
           episode: currentEpisode,
           rawUrl: payload.rawUrl,
+          headers: hlsHeadersRef.current,
           captionTracks: captionTracks.length,
         })
         setStreamData({
@@ -550,6 +589,9 @@ export default function AnimePlayer({
   useEffect(() => {
     const video = videoRef.current
     if (!activeStreamUrl || !video) return undefined
+    let disposed = false
+    let manifestBlobUrl = ''
+
     if (hlsRef.current) {
       hlsRef.current.destroy()
       hlsRef.current = null
@@ -569,11 +611,14 @@ export default function AnimePlayer({
     }
 
     if (Hls.isSupported()) {
-      const TauriLoader = createTauriLoader(Hls.DefaultConfig.loader)
+      const TauriLoader = createTauriLoader(
+        Hls.DefaultConfig.loader,
+        () => hlsHeadersRef.current
+      )
       const hls = new Hls({
         loader: TauriLoader,
         fLoader: TauriLoader,
-        pLoader: Hls.DefaultConfig.loader,
+        pLoader: TauriLoader,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
         lowLatencyMode: false,
@@ -581,11 +626,32 @@ export default function AnimePlayer({
         startLevel: -1,
       })
       hlsRef.current = hls
-      hls.attachMedia(video)
-      hls.loadSource(activeStreamUrl)
       startupTimerRef.current = window.setTimeout(() => {
         handleStreamFailure()
       }, STARTUP_TIMEOUT_MS)
+
+      const attachSource = (sourceUrl) => {
+        if (disposed) return
+        hls.loadSource(sourceUrl)
+        hls.attachMedia(video)
+      }
+
+      invoke('fetch_hls_manifest', {
+        url: activeStreamUrl,
+        headers: hlsHeadersRef.current,
+      })
+        .then((rewrittenManifest) => {
+          if (disposed) return
+          manifestBlobUrl = URL.createObjectURL(new Blob(
+            [rewrittenManifest],
+            { type: 'application/vnd.apple.mpegurl' }
+          ))
+          attachSource(manifestBlobUrl)
+        })
+        .catch(() => {
+          attachSource(activeStreamUrl)
+        })
+
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         const levels = hls.levels
           .map(level => level.height)
@@ -621,7 +687,11 @@ export default function AnimePlayer({
         }
       })
       return () => {
+        disposed = true
         clearStartupTimer()
+        if (manifestBlobUrl) {
+          URL.revokeObjectURL(manifestBlobUrl)
+        }
         hls.destroy()
         hlsRef.current = null
       }
@@ -633,6 +703,7 @@ export default function AnimePlayer({
     }
 
     return () => {
+      disposed = true
       clearStartupTimer()
       video.pause()
       video.removeAttribute('src')
