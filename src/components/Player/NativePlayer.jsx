@@ -7,11 +7,11 @@ import { listen } from '@tauri-apps/api/event'
 import { Maximize, Minimize, Pause, Play, X } from 'lucide-react'
 
 const SERVER_NAMES = [
-  ['vidsrc.cc', 'VidSrc CC'],
-  ['2embed.online', '2Embed'],
-  ['vidlink.pro', 'VidLink'],
-  ['vidsrc.icu', 'VidSrc ICU'],
-  ['godriveplayer.com', 'GoDrive'],
+  ['vidsrc.xyz', 'VidSrc XYZ'],
+  ['vidsrc.net', 'VidSrc Net'],
+  ['vidsrc.me', 'VidSrc Me'],
+  ['autoembed.cc', 'AutoEmbed'],
+  ['moviesapi.club', 'MoviesAPI'],
 ]
 
 function resolveServerName(embedUrl, fallback) {
@@ -180,7 +180,7 @@ export default function NativePlayer({
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
       window.removeEventListener('keydown', handleKeyDown)
     }
-  })
+  }, [onClose])
 
   const togglePlayback = () => {
     const video = videoRef.current

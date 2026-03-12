@@ -1,9 +1,9 @@
 export const ANIME_SERVER_LABELS = [
-  'VidSrc CC',
-  '2Embed',
-  'VidLink',
-  'VidSrc ICU',
-  'GoDrive',
+  'VidSrc XYZ',
+  'VidSrc Net',
+  'VidSrc Me',
+  'AutoEmbed',
+  'MoviesAPI',
 ]
 
 export const getMovieEmbeds = (id) => [
@@ -23,10 +23,4 @@ export const getSeriesEmbeds = (id, s = 1, e = 1) => [
   `https://moviesapi.club/tv/${id}-${s}-${e}`,
 ]
 
-export const getAnimeEmbeds = (id, s = 1, e = 1) => [
-  `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}`,
-  `https://www.2embed.online/embed/tv/${id}/${s}/${e}`,
-  `https://vidlink.pro/tv/${id}/${s}/${e}`,
-  `https://vidsrc.icu/embed/tv?tmdb=${id}&season=${s}&episode=${e}`,
-  `https://godriveplayer.com/player.php?tmdb=${id}&season=${s}&episode=${e}`,
-]
+export const getAnimeEmbeds = (id, s = 1, e = 1) => getSeriesEmbeds(id, s, e)
