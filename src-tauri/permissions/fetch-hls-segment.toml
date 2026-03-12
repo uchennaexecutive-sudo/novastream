@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-fetch-hls-segment"
+description = "Allows the app to fetch HLS segments through the Rust command."
+commands.allow = ["fetch_hls_segment"]

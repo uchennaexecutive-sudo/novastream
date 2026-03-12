@@ -72,19 +72,6 @@ const parseVtt = (text) => text
   })
   .filter(Boolean)
 
-const normalizeProxyHeaders = (headers) => (
-  headers && typeof headers === 'object' && !Array.isArray(headers)
-    ? Object.fromEntries(
-      Object.entries(headers).filter(([key, value]) => (
-        typeof key === 'string'
-        && key.trim()
-        && typeof value === 'string'
-        && value.trim()
-      ))
-    )
-    : {}
-)
-
 const formatHlsErrorDetail = (data) => {
   const parts = [
     data?.type,
@@ -94,6 +81,87 @@ const formatHlsErrorDetail = (data) => {
   ].filter(Boolean)
 
   return parts.join(' | ')
+}
+
+const normalizeBinaryPayload = (data) => {
+  if (data instanceof ArrayBuffer) return data
+  if (data instanceof Uint8Array) {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+  }
+  if (ArrayBuffer.isView(data)) {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+  }
+  if (Array.isArray(data)) {
+    return new Uint8Array(data).buffer
+  }
+  return new Uint8Array(0).buffer
+}
+
+function createTauriLoader(base) {
+  const Base = base
+
+  return class TauriLoader extends Base {
+    constructor(config) {
+      super(config)
+      this.aborted = false
+    }
+
+    destroy() {
+      this.aborted = true
+      if (super.destroy) super.destroy()
+    }
+
+    abort(...args) {
+      this.aborted = true
+      if (super.abort) super.abort(...args)
+    }
+
+    load(context, config, callbacks) {
+      this.aborted = false
+
+      const url = context.url
+      const isSegment = url.includes('.ts')
+        || url.includes('.m4s')
+        || url.includes('.aac')
+        || url.includes('.mp4')
+      const isKey = url.includes('.key') || context.type === 'key'
+
+      if (isSegment || isKey) {
+        const startTime = performance.now()
+
+        invoke('fetch_hls_segment', { url })
+          .then((data) => {
+            if (this.aborted) return
+
+            const payload = normalizeBinaryPayload(data)
+            const endTime = performance.now()
+            const stats = {
+              trequest: startTime,
+              tfirst: endTime,
+              tload: endTime,
+              loaded: payload.byteLength,
+              total: payload.byteLength,
+              bwEstimate: 0,
+            }
+
+            callbacks.onSuccess({ data: payload, url }, stats, context, null)
+          })
+          .catch((err) => {
+            if (this.aborted) return
+
+            callbacks.onError(
+              { code: 0, text: err.toString() },
+              context,
+              null
+            )
+          })
+
+        return
+      }
+
+      super.load(context, config, callbacks)
+    }
+  }
 }
 
 export default function AnimePlayer({
@@ -121,8 +189,7 @@ export default function AnimePlayer({
   const [animeId, setAnimeId] = useState('')
   const [episodes, setEpisodes] = useState([])
   const [currentEpisode, setCurrentEpisode] = useState(Number(episode) || 1)
-  const [streamData, setStreamData] = useState({ rawUrl: '', proxyUrl: '' })
-  const [streamMode, setStreamMode] = useState('proxy')
+  const [streamData, setStreamData] = useState({ rawUrl: '' })
   const [streamSources, setStreamSources] = useState([])
   const [subtitleTracks, setSubtitleTracks] = useState([])
   const [subtitleCues, setSubtitleCues] = useState([])
@@ -159,14 +226,8 @@ export default function AnimePlayer({
     [episodes, currentEpisode]
   )
   const activeStreamUrl = useMemo(
-    () => (streamMode === 'raw' ? streamData.rawUrl : (streamData.proxyUrl || streamData.rawUrl || '')),
-    [streamData.proxyUrl, streamData.rawUrl, streamMode]
-  )
-  const canFallbackToRaw = Boolean(
-    streamData.rawUrl
-    && streamData.proxyUrl
-    && streamData.rawUrl !== streamData.proxyUrl
-    && streamMode !== 'raw'
+    () => streamData.rawUrl || '',
+    [streamData.rawUrl]
   )
   const hasPrevEpisode = episodes.some(item => Number(item.number) === Number(currentEpisode) - 1)
   const hasNextEpisode = episodes.some(item => Number(item.number) === Number(currentEpisode) + 1)
@@ -183,8 +244,7 @@ export default function AnimePlayer({
   }
   const resetPlaybackState = () => {
     clearStartupTimer()
-    setStreamData({ rawUrl: '', proxyUrl: '' })
-    setStreamMode('proxy')
+    setStreamData({ rawUrl: '' })
     setStreamSources([])
     setSubtitleTracks([])
     setSubtitleCues([])
@@ -426,43 +486,16 @@ export default function AnimePlayer({
         if (cancelled) return
         if (!payload?.rawUrl) throw new Error('Invalid stream')
 
-        const proxyHeaders = normalizeProxyHeaders(payload.headers)
-        const proxyUrl = await invoke('proxy_hls_url', {
-          url: payload.rawUrl,
-          headers: proxyHeaders,
-        }).catch(() => '')
-        const captionTracks = await Promise.all(
-          (payload.tracks || [])
-            .filter(track => track.kind === 'captions')
-            .map(async (track) => {
-              const rawTrackUrl = track.file || track.url || track.rawFile || null
-              if (!rawTrackUrl) return track
-
-              const proxiedTrackUrl = await invoke('proxy_hls_url', {
-                url: rawTrackUrl,
-                headers: proxyHeaders,
-              }).catch(() => rawTrackUrl)
-              return {
-                ...track,
-                rawFile: rawTrackUrl,
-                file: proxiedTrackUrl,
-                url: proxiedTrackUrl,
-              }
-            })
-        )
+        const captionTracks = (payload.tracks || []).filter(track => track.kind === 'captions')
         console.info('[AnimePlayer] resolved stream', {
           animeTitle,
           episode: currentEpisode,
           rawUrl: payload.rawUrl,
-          proxyUrl,
-          proxyHeaders,
           captionTracks: captionTracks.length,
         })
         setStreamData({
           rawUrl: payload.rawUrl || '',
-          proxyUrl,
         })
-        setStreamMode(proxyUrl ? 'proxy' : 'raw')
         setStreamSources(payload.sources || [])
         setSubtitleTracks(captionTracks)
         setSubtitleEnabled(captionTracks.length > 0)
@@ -482,23 +515,18 @@ export default function AnimePlayer({
 
   useEffect(() => {
     const preferredTrack = subtitleTracks.find(track => String(track.lang || '').toLowerCase().includes('english')) || subtitleTracks[0]
-    const proxiedTrackUrl = preferredTrack?.file || preferredTrack?.url || null
-    const rawTrackUrl = preferredTrack?.rawFile || null
+    const trackUrl = preferredTrack?.file || preferredTrack?.url || preferredTrack?.rawFile || null
 
-    if (!subtitleEnabled || !proxiedTrackUrl) {
+    if (!subtitleEnabled || !trackUrl) {
       setSubtitleCues([])
       setSubtitleText('')
       return undefined
     }
     let cancelled = false
-    fetch(proxiedTrackUrl)
+    fetch(trackUrl)
       .then(response => {
-        if (!response.ok) throw new Error('Subtitle proxy failed')
+        if (!response.ok) throw new Error('Subtitle fetch failed')
         return response.text()
-      })
-      .catch(() => {
-        if (!rawTrackUrl || rawTrackUrl === proxiedTrackUrl) throw new Error('Subtitle fetch failed')
-        return fetch(rawTrackUrl).then(response => response.text())
       })
       .then(text => {
         if (!cancelled) setSubtitleCues(parseVtt(text))
@@ -536,20 +564,16 @@ export default function AnimePlayer({
 
     const handleStreamFailure = () => {
       clearStartupTimer()
-      setErrorDetail(detail => detail || `Startup timeout while using ${streamMode === 'raw' ? 'raw stream' : 'local proxy'}`)
-      if (canFallbackToRaw) {
-        setLoading(true)
-        setLoadingStage('Retrying raw stream...')
-        setError('')
-        setStreamMode('raw')
-        return
-      }
-
+      setErrorDetail(detail => detail || 'Startup timeout while loading HLS stream')
       scheduleFreshStreamRetry()
     }
 
     if (Hls.isSupported()) {
+      const TauriLoader = createTauriLoader(Hls.DefaultConfig.loader)
       const hls = new Hls({
+        loader: TauriLoader,
+        fLoader: TauriLoader,
+        pLoader: Hls.DefaultConfig.loader,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
         lowLatencyMode: false,
@@ -614,7 +638,7 @@ export default function AnimePlayer({
       video.removeAttribute('src')
       video.load()
     }
-  }, [activeStreamUrl, canFallbackToRaw, streamMode])
+  }, [activeStreamUrl])
 
   useEffect(() => {
     const video = videoRef.current
@@ -661,14 +685,6 @@ export default function AnimePlayer({
         : 'HTMLVideoElement error'
       console.error('[AnimePlayer] video element error', detail)
       setErrorDetail(detail)
-      if (canFallbackToRaw) {
-        setLoading(true)
-        setLoadingStage('Retrying raw stream...')
-        setError('')
-        setStreamMode('raw')
-        return
-      }
-
       scheduleFreshStreamRetry()
     }
     video.addEventListener('timeupdate', syncState)
@@ -689,7 +705,7 @@ export default function AnimePlayer({
       video.removeEventListener('pause', handlePause)
       video.removeEventListener('error', handleVideoError)
     }
-  }, [activeStreamUrl, canFallbackToRaw, currentEpisode])
+  }, [activeStreamUrl, currentEpisode])
 
   useEffect(() => {
     const video = videoRef.current
@@ -908,7 +924,7 @@ export default function AnimePlayer({
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs text-white/55">
                     <span>{animeTitle}</span>
-                    <span>Season {season} Episode {currentEpisodeMeta?.number || currentEpisode} | {STREAM_SERVER.label} | {streamMode === 'raw' ? 'Raw fallback' : 'Local proxy'}</span>
+                    <span>Season {season} Episode {currentEpisodeMeta?.number || currentEpisode} | {STREAM_SERVER.label} | HLS</span>
                   </div>
                 </motion.div>
               )}
