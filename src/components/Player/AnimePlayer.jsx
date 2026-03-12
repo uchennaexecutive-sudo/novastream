@@ -72,6 +72,30 @@ const parseVtt = (text) => text
   })
   .filter(Boolean)
 
+const normalizeProxyHeaders = (headers) => (
+  headers && typeof headers === 'object' && !Array.isArray(headers)
+    ? Object.fromEntries(
+      Object.entries(headers).filter(([key, value]) => (
+        typeof key === 'string'
+        && key.trim()
+        && typeof value === 'string'
+        && value.trim()
+      ))
+    )
+    : {}
+)
+
+const formatHlsErrorDetail = (data) => {
+  const parts = [
+    data?.type,
+    data?.details,
+    data?.reason,
+    data?.response?.code ? `HTTP ${data.response.code}` : '',
+  ].filter(Boolean)
+
+  return parts.join(' | ')
+}
+
 export default function AnimePlayer({
   animeTitle,
   contentId,
@@ -107,6 +131,7 @@ export default function AnimePlayer({
   const [loading, setLoading] = useState(true)
   const [loadingStage, setLoadingStage] = useState('Finding anime...')
   const [error, setError] = useState('')
+  const [errorDetail, setErrorDetail] = useState('')
   const [retryNonce, setRetryNonce] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
@@ -169,6 +194,7 @@ export default function AnimePlayer({
     setCurrentTime(0)
     setDuration(0)
     setBufferedEnd(0)
+    setErrorDetail('')
   }
   const persistProgress = useCallback(() => {
     const video = videoRef.current
@@ -293,6 +319,7 @@ export default function AnimePlayer({
     setLoading(true)
     setLoadingStage('Fetching stream...')
     setError('')
+    setErrorDetail('')
     setRetryNonce(value => value + 1)
   }
   const scheduleFreshStreamRetry = () => {
@@ -391,6 +418,7 @@ export default function AnimePlayer({
       setLoading(true)
       setLoadingStage('Fetching stream...')
       setError('')
+      setErrorDetail('')
       resetPlaybackState()
 
       try {
@@ -398,7 +426,11 @@ export default function AnimePlayer({
         if (cancelled) return
         if (!payload?.rawUrl) throw new Error('Invalid stream')
 
-        const proxyUrl = await invoke('proxy_hls_url', { url: payload.rawUrl }).catch(() => '')
+        const proxyHeaders = normalizeProxyHeaders(payload.headers)
+        const proxyUrl = await invoke('proxy_hls_url', {
+          url: payload.rawUrl,
+          headers: proxyHeaders,
+        }).catch(() => '')
         const captionTracks = await Promise.all(
           (payload.tracks || [])
             .filter(track => track.kind === 'captions')
@@ -406,7 +438,10 @@ export default function AnimePlayer({
               const rawTrackUrl = track.file || track.url || track.rawFile || null
               if (!rawTrackUrl) return track
 
-              const proxiedTrackUrl = await invoke('proxy_hls_url', { url: rawTrackUrl }).catch(() => rawTrackUrl)
+              const proxiedTrackUrl = await invoke('proxy_hls_url', {
+                url: rawTrackUrl,
+                headers: proxyHeaders,
+              }).catch(() => rawTrackUrl)
               return {
                 ...track,
                 rawFile: rawTrackUrl,
@@ -415,6 +450,14 @@ export default function AnimePlayer({
               }
             })
         )
+        console.info('[AnimePlayer] resolved stream', {
+          animeTitle,
+          episode: currentEpisode,
+          rawUrl: payload.rawUrl,
+          proxyUrl,
+          proxyHeaders,
+          captionTracks: captionTracks.length,
+        })
         setStreamData({
           rawUrl: payload.rawUrl || '',
           proxyUrl,
@@ -424,8 +467,10 @@ export default function AnimePlayer({
         setSubtitleTracks(captionTracks)
         setSubtitleEnabled(captionTracks.length > 0)
         setLoadingStage('Buffering...')
-      } catch {
+      } catch (streamError) {
+        console.error('[AnimePlayer] stream resolution failed', streamError)
         if (!cancelled) {
+          setErrorDetail(streamError instanceof Error ? streamError.message : 'Stream resolution failed')
           scheduleFreshStreamRetry()
         }
       }
@@ -458,7 +503,8 @@ export default function AnimePlayer({
       .then(text => {
         if (!cancelled) setSubtitleCues(parseVtt(text))
       })
-      .catch(() => {
+      .catch((subtitleError) => {
+        console.warn('[AnimePlayer] subtitle load failed', subtitleError)
         if (!cancelled) setSubtitleCues([])
       })
     return () => { cancelled = true }
@@ -490,6 +536,7 @@ export default function AnimePlayer({
 
     const handleStreamFailure = () => {
       clearStartupTimer()
+      setErrorDetail(detail => detail || `Startup timeout while using ${streamMode === 'raw' ? 'raw stream' : 'local proxy'}`)
       if (canFallbackToRaw) {
         setLoading(true)
         setLoadingStage('Retrying raw stream...')
@@ -526,7 +573,25 @@ export default function AnimePlayer({
         }
         video.play().catch(() => {})
       })
+      hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
+        console.info('[AnimePlayer] HLS level loaded', {
+          level: data?.level,
+          details: data?.details?.live ? 'live' : 'vod',
+          totalduration: data?.details?.totalduration,
+        })
+      })
+      hls.on(Hls.Events.FRAG_LOADING, (_, data) => {
+        console.debug('[AnimePlayer] HLS fragment loading', data?.frag?.url)
+      })
+      hls.on(Hls.Events.KEY_LOADING, (_, data) => {
+        console.debug('[AnimePlayer] HLS key loading', data?.frag?.decryptdata?.uri)
+      })
       hls.on(Hls.Events.ERROR, (_, data) => {
+        const detail = formatHlsErrorDetail(data)
+        console.error('[AnimePlayer] HLS error', data)
+        if (detail) {
+          setErrorDetail(detail)
+        }
         if (data?.fatal) {
           handleStreamFailure()
         }
@@ -590,6 +655,12 @@ export default function AnimePlayer({
       applyPendingResume()
     }
     const handleVideoError = () => {
+      const mediaError = video.error
+      const detail = mediaError
+        ? `MediaError code ${mediaError.code}${mediaError.message ? ` | ${mediaError.message}` : ''}`
+        : 'HTMLVideoElement error'
+      console.error('[AnimePlayer] video element error', detail)
+      setErrorDetail(detail)
       if (canFallbackToRaw) {
         setLoading(true)
         setLoadingStage('Retrying raw stream...')
@@ -764,6 +835,7 @@ export default function AnimePlayer({
               <div className="flex flex-col items-center gap-4 text-center">
                 <p className="text-2xl font-display text-white">{error}</p>
                 <p className="text-sm text-white/50">HD-2 did not return a playable source after 3 fresh attempts.</p>
+                {errorDetail && <p className="max-w-xl text-xs text-white/35 font-mono">{errorDetail}</p>}
                 <button onClick={retryFreshStream} className="px-5 py-2.5 rounded-xl text-sm font-semibold" style={{ background: 'var(--accent)', color: '#fff', boxShadow: '0 0 20px var(--accent-glow)' }}>Retry HD-2</button>
               </div>
             ) : (

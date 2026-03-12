@@ -6,31 +6,32 @@ import '@fontsource-variable/jetbrains-mono'
 import './themes/themes.css'
 import './index.css'
 
-// Apply theme before first render to prevent flash
 const saved = localStorage.getItem('nova-theme') || 'nova-dark'
 document.documentElement.setAttribute('data-theme', saved)
 
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import UpdateToast from './components/UI/UpdateToast'
 import useAppStore from './store/useAppStore'
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
-
-// Current app version — must match tauri.conf.json
-const APP_VERSION = '1.1.2'
-
-// GitHub Contents API — returns raw JSON regardless of network
-const UPDATE_API = 'https://api.github.com/repos/uchennaexecutive-sudo/novastream/contents/updates/latest.json'
+const APP_VERSION = '1.1.3'
+const UPDATE_API = 'https://raw.githubusercontent.com/uchennaexecutive-sudo/novastream/main/updates/latest.json'
+const UPDATE_CHECK_TIMEOUT_MS = 15000
+const UPDATE_INITIAL_DELAY_MS = 5000
+const UPDATE_RETRY_DELAYS_MS = [10000, 20000, 45000, 90000, 180000]
+const UPDATE_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 function compareVersions(a, b) {
   const pa = a.split('.').map(Number)
   const pb = b.split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
+
+  for (let i = 0; i < 3; i += 1) {
     if ((pa[i] || 0) < (pb[i] || 0)) return -1
     if ((pa[i] || 0) > (pb[i] || 0)) return 1
   }
+
   return 0
 }
 
@@ -43,10 +44,12 @@ function Root() {
   const updateState = useAppStore(s => s.updateState)
   const updateVersion = useAppStore(s => s.updateVersion)
   const updateNotes = useAppStore(s => s.updateNotes)
+  const retryTimerRef = useRef(null)
+  const cancelledRef = useRef(false)
 
   useEffect(() => {
-    // Listen for streaming progress events from Rust
     let unlisten = null
+
     if (isTauri) {
       import('@tauri-apps/api/event').then(({ listen }) => {
         listen('download-progress', (event) => {
@@ -54,23 +57,78 @@ function Root() {
         }).then(fn => { unlisten = fn })
       })
     }
-    return () => { if (unlisten) unlisten() }
-  }, [])
+
+    return () => {
+      if (unlisten) unlisten()
+    }
+  }, [setDownloadProgress])
 
   useEffect(() => {
-    async function checkAndDownload(attempt = 1) {
+    cancelledRef.current = false
+
+    const clearRetryTimer = () => {
+      window.clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+
+    const scheduleCheck = (delayMs) => {
+      clearRetryTimer()
+      retryTimerRef.current = window.setTimeout(() => {
+        if (!cancelledRef.current) {
+          checkAndDownload()
+        }
+      }, delayMs)
+    }
+
+    const downloadUpdate = async (downloadUrl, version, attemptIndex = 0) => {
+      try {
+        setUpdateState('downloading')
+        setDownloadProgress(0)
+
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('download_update', { url: downloadUrl })
+
+        if (cancelledRef.current) return
+
+        setUpdateState('ready')
+      } catch (error) {
+        console.error(`[updater] download failed for v${version} (attempt ${attemptIndex + 1})`, error)
+
+        if (cancelledRef.current) return
+
+        if (attemptIndex < UPDATE_RETRY_DELAYS_MS.length - 1) {
+          setUpdateState('error')
+          retryTimerRef.current = window.setTimeout(() => {
+            if (!cancelledRef.current) {
+              downloadUpdate(downloadUrl, version, attemptIndex + 1)
+            }
+          }, UPDATE_RETRY_DELAYS_MS[attemptIndex])
+          return
+        }
+
+        setUpdateState('error')
+        scheduleCheck(UPDATE_REFRESH_INTERVAL_MS)
+      }
+    }
+
+    async function checkAndDownload() {
       try {
         setUpdateState('checking')
 
         const res = await fetch(UPDATE_API, {
-          headers: { 'Accept': 'application/vnd.github.v3.raw' },
-          signal: AbortSignal.timeout(10000), // 10s timeout on the check
+          cache: 'no-store',
+          signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS),
         })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`)
+        }
+
         const data = await res.json()
 
         if (!data.version || compareVersions(APP_VERSION, data.version) >= 0) {
           setUpdateState('up-to-date')
+          scheduleCheck(UPDATE_REFRESH_INTERVAL_MS)
           return
         }
 
@@ -83,39 +141,37 @@ function Root() {
 
         const downloadUrl = data.platforms?.['windows-x86_64']?.url
         if (!downloadUrl) {
-          setUpdateState('up-to-date')
+          console.error(`[updater] missing windows-x86_64 download URL for v${data.version}`)
+          setUpdateState('error')
+          scheduleCheck(UPDATE_RETRY_DELAYS_MS[0])
           return
         }
 
-        setUpdateState('downloading')
-        setDownloadProgress(0)
+        await downloadUpdate(downloadUrl, data.version, 0)
+      } catch (error) {
+        console.error('[updater] check failed', error)
 
-        const { invoke } = await import('@tauri-apps/api/core')
-        await invoke('download_update', { url: downloadUrl })
+        if (cancelledRef.current) return
 
-        setUpdateState('ready')
-      } catch (e) {
-        console.log(`Update check failed (attempt ${attempt}):`, e)
-        if (attempt < 3) {
-          // Retry up to 2 more times with 8s delay
-          setTimeout(() => checkAndDownload(attempt + 1), 8000)
-        } else {
-          setUpdateState('error')
-        }
+        setUpdateState('error')
+        scheduleCheck(UPDATE_RETRY_DELAYS_MS[0])
       }
     }
 
-    // Wait 5s after launch before first check
-    const timer = setTimeout(checkAndDownload, 5000)
-    return () => clearTimeout(timer)
-  }, [])
+    scheduleCheck(UPDATE_INITIAL_DELAY_MS)
+
+    return () => {
+      cancelledRef.current = true
+      clearRetryTimer()
+    }
+  }, [setDownloadProgress, setUpdateInfo, setUpdateState])
 
   const handleRestart = async () => {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('apply_update')
-    } catch (e) {
-      console.error('Failed to apply update:', e)
+    } catch (error) {
+      console.error('Failed to apply update:', error)
     }
   }
 

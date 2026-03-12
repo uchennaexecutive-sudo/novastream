@@ -244,6 +244,7 @@ export default function Settings() {
             v{APP_VERSION} — Changelog
           </p>
           <div className="text-xs space-y-1 mb-2" style={{ color: 'var(--text-muted)' }}>
+            <p>v1.1.3 - Hardened auto-update delivery, retries, and logging; improved anime proxy transport with source headers and diagnostics</p>
             <p>v1.1.2 - Local Rust HLS proxy server for anime streaming with playlist rewriting, segment passthrough, and subtitle proxying</p>
             <p>v1.1.1 - Restored Home row icons, fixed continue watching/resume progress, and stabilized anime proxy playback</p>
             <p>v1.1.0 - Watch Intelligence: continue watching, progress tracking, resume playback, recommendations, and anime proxy reliability</p>
