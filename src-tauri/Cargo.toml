@@ -1,6 +1,6 @@
 [package]
 name = "nova-stream"
-version = "1.0.13"
+version = "1.0.14"
 description = "NOVA STREAM - Premium Streaming Desktop App"
 authors = ["you"]
 license = ""

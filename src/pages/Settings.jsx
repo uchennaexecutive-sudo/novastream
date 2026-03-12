@@ -244,6 +244,7 @@ export default function Settings() {
             v{APP_VERSION} — Changelog
           </p>
           <div className="text-xs space-y-1 mb-2" style={{ color: 'var(--text-muted)' }}>
+            <p>v1.0.14 - Fixed `release.ps1` to auto-bump version in all 4 files before release</p>
             <p>â€¢ v1.0.13 â€” Replaced anime sandboxed embeds with anime-safe sources and updated player server labels</p>
             <p>â€¢ v1.0.12 â€” Fixed version number baked into binary</p>
             <p>â€¢ v1.0.11 â€” Fixed anime player TMDB lookup and unavailable-stream handling</p>
