@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Maximize, Minimize, X } from 'lucide-react'
-import { getAnimeEmbeds, getMovieEmbeds, getSeriesEmbeds } from '../../lib/embeds'
+import { ANIME_SERVER_LABELS, getAnimeEmbeds, getMovieEmbeds, getSeriesEmbeds } from '../../lib/embeds'
 import { addToHistory } from '../../lib/supabase'
 
 // Human-readable server labels
@@ -13,14 +13,6 @@ const DEFAULT_SERVER_LABELS = [
   'AutoEmbed',
   'MoviesAPI',
   'NontonFilm',
-]
-
-const ANIME_SERVER_LABELS = [
-  'VidSrc CC',
-  '2Embed',
-  'VidLink',
-  'VidSrc ICU',
-  'GoDrive',
 ]
 
 export default function PlayerModal({ isOpen, onClose, tmdbId, mediaType, title, posterPath, season, episode, isAnime = false }) {

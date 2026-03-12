@@ -1,3 +1,11 @@
+export const ANIME_SERVER_LABELS = [
+  'VidSrc CC',
+  '2Embed',
+  'VidLink',
+  'VidSrc ICU',
+  'GoDrive',
+]
+
 export const getMovieEmbeds = (id) => [
   `https://vidsrc.xyz/embed/movie?tmdb=${id}`,
   `https://vidsrc.net/embed/movie?tmdb=${id}`,

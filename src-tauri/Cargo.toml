@@ -1,6 +1,6 @@
 [package]
 name = "nova-stream"
-version = "1.0.14"
+version = "1.0.15"
 description = "NOVA STREAM - Premium Streaming Desktop App"
 authors = ["you"]
 license = ""
@@ -19,5 +19,5 @@ tauri = { version = "2.10.3", features = [] }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 reqwest = { version = "0.12", features = ["rustls-tls", "stream"] }
-tokio = { version = "1", features = ["fs"] }
+tokio = { version = "1", features = ["fs", "time"] }
 futures-util = "0.3"

@@ -8,8 +8,10 @@ import RatingBadge from '../components/UI/RatingBadge'
 import GlassBadge from '../components/UI/GlassBadge'
 import MediaCard from '../components/Cards/MediaCard'
 import EpisodeSelector from '../components/Player/EpisodeSelector'
+import NativePlayer from '../components/Player/NativePlayer'
 import PlayerModal from '../components/Player/PlayerModal'
-import { addToWatchlist, isInWatchlist } from '../lib/supabase'
+import { ANIME_SERVER_LABELS, getAnimeEmbeds } from '../lib/embeds'
+import { addToHistory, addToWatchlist, isInWatchlist } from '../lib/supabase'
 
 export default function Detail() {
   const { type, id } = useParams()
@@ -17,8 +19,10 @@ export default function Detail() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [playerOpen, setPlayerOpen] = useState(false)
+  const [nativePlayerOpen, setNativePlayerOpen] = useState(false)
   const [playSeason, setPlaySeason] = useState(1)
   const [playEpisode, setPlayEpisode] = useState(1)
+  const [animeSourceIndex, setAnimeSourceIndex] = useState(0)
   const [inWatchlist, setInWatchlist] = useState(false)
 
   useEffect(() => {
@@ -50,6 +54,7 @@ export default function Detail() {
   const numSeasons = data.number_of_seasons || 0
   const year = (data.release_date || data.first_air_date || '').slice(0, 4)
   const isAnime = Boolean(location.state?.isAnime)
+  const animeEmbeds = isAnime ? getAnimeEmbeds(data.id, playSeason, playEpisode) : []
 
   const handleWatchlist = async () => {
     await addToWatchlist({
@@ -62,9 +67,41 @@ export default function Detail() {
   }
 
   const handlePlay = (s, e) => {
-    setPlaySeason(s || 1)
-    setPlayEpisode(e || 1)
+    const nextSeason = s || 1
+    const nextEpisode = e || 1
+
+    setPlaySeason(nextSeason)
+    setPlayEpisode(nextEpisode)
+
+    if (isAnime) {
+      setAnimeSourceIndex(0)
+      setNativePlayerOpen(true)
+      addToHistory({
+        tmdb_id: data.id,
+        media_type: type,
+        title,
+        poster_path: data.poster_path,
+        season: nextSeason,
+        episode: nextEpisode,
+      }).catch(() => {})
+      return
+    }
+
     setPlayerOpen(true)
+  }
+
+  const handleCloseNativePlayer = () => {
+    setNativePlayerOpen(false)
+    setAnimeSourceIndex(0)
+  }
+
+  const handleAnimeCaptureFailure = () => {
+    if (animeSourceIndex < animeEmbeds.length - 1) {
+      setAnimeSourceIndex(i => i + 1)
+      return true
+    }
+
+    return false
   }
 
   return (
@@ -306,17 +343,31 @@ export default function Detail() {
         )}
       </div>
 
-      <PlayerModal
-        isOpen={playerOpen}
-        onClose={() => setPlayerOpen(false)}
-        tmdbId={data.id}
-        mediaType={type}
-        title={title}
-        posterPath={data.poster_path}
-        season={playSeason}
-        episode={playEpisode}
-        isAnime={isAnime}
-      />
+      {!isAnime && (
+        <PlayerModal
+          isOpen={playerOpen}
+          onClose={() => setPlayerOpen(false)}
+          tmdbId={data.id}
+          mediaType={type}
+          title={title}
+          posterPath={data.poster_path}
+          season={playSeason}
+          episode={playEpisode}
+          isAnime={false}
+        />
+      )}
+
+      {isAnime && nativePlayerOpen && animeEmbeds[animeSourceIndex] && (
+        <NativePlayer
+          key={`${data.id}-${playSeason}-${playEpisode}-${animeSourceIndex}`}
+          embedUrl={animeEmbeds[animeSourceIndex]}
+          title={title}
+          onClose={handleCloseNativePlayer}
+          onFailure={handleAnimeCaptureFailure}
+          isAnime
+          serverName={ANIME_SERVER_LABELS[animeSourceIndex]}
+        />
+      )}
     </div>
   )
 }
