@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-resolve-embed-stream"
+description = "Allow resolving direct media streams from embedded providers"
+commands.allow = ["resolve_embed_stream"]

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-open-iframe-player-window"
+description = "Allow opening the dedicated iframe player window"
+commands.allow = ["open_iframe_player_window"]

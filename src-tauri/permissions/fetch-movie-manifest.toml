@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-fetch-movie-manifest"
+description = "Fetch movie HLS manifests through Rust"
+commands.allow = ["fetch_movie_manifest"]

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-complete-browser-fetch"
+description = "Allow the hidden browser fetch bridge to complete in-browser HLS fetches"
+commands.allow = ["complete_browser_fetch"]

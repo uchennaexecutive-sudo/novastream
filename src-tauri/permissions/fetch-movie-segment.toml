@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-fetch-movie-segment"
+description = "Fetch movie stream segments through Rust"
+commands.allow = ["fetch_movie_segment"]

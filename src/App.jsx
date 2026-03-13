@@ -7,6 +7,8 @@ import Series from './pages/Series'
 import Anime from './pages/Anime'
 import Animation from './pages/Animation'
 import Detail from './pages/Detail'
+import IframePlayerWindow from './pages/IframePlayerWindow'
+import BrowserFetchBridge from './pages/BrowserFetchBridge'
 import Watchlist from './pages/Watchlist'
 import History from './pages/History'
 import Settings from './pages/Settings'
@@ -16,8 +18,13 @@ import useAppStore from './store/useAppStore'
 
 export default function App() {
   const searchOpen = useAppStore(s => s.searchOpen)
+  const isSpecialWindow = typeof window !== 'undefined'
+    && (
+      window.location.pathname.startsWith('/player-window')
+      || window.location.pathname.startsWith('/fetch-bridge')
+    )
   const [showIntro, setShowIntro] = useState(
-    !sessionStorage.getItem('nova-intro-shown')
+    !isSpecialWindow && !sessionStorage.getItem('nova-intro-shown')
   )
 
   const handleIntroComplete = () => {
@@ -32,6 +39,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/player-window" element={<IframePlayerWindow />} />
+        <Route path="/fetch-bridge" element={<BrowserFetchBridge />} />
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
           <Route path="/movies" element={<Movies />} />
@@ -44,7 +53,7 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>
-      {searchOpen && <SearchOverlay />}
+      {!isSpecialWindow && searchOpen && <SearchOverlay />}
     </BrowserRouter>
   )
 }

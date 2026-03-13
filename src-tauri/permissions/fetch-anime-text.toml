@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-fetch-anime-text"
+description = "Allow fetching anime subtitle or text assets through Rust"
+commands.allow = ["fetch_anime_text"]

@@ -29,6 +29,15 @@ const normalizeProgressNumber = (value) => {
 
 const buildEpisodeKey = (season, episode) => `${season || 0}:${episode || 0}`
 const buildProgressKey = (contentId, season, episode) => `${String(contentId)}::${buildEpisodeKey(season, episode)}`
+const buildContinueWatchingKey = (item) => {
+  const contentType = item?.content_type || item?.media_type || 'movie'
+  const contentId = String(item?.content_id || item?.tmdb_id || item?.id || '')
+  const isEpisodic = contentType === 'tv' || contentType === 'anime' || (Number(item?.season) > 0 && Number(item?.episode) > 0)
+
+  return isEpisodic
+    ? `${contentType}::${contentId}`
+    : `${contentType}::${contentId}::${buildEpisodeKey(item?.season, item?.episode)}`
+}
 
 const getUpdatedAtValue = (row) => {
   const parsed = Date.parse(row?.updated_at || '')
@@ -245,7 +254,7 @@ export async function getContinueWatching() {
     .filter(item => item.progress_seconds > 0)
     .filter(isResumableProgress)
     .filter((item) => {
-      const key = buildProgressKey(item.content_id, item.season, item.episode)
+      const key = buildContinueWatchingKey(item)
       if (seen.has(key)) return false
       seen.add(key)
       return true

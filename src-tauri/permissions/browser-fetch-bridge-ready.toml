@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-browser-fetch-bridge-ready"
+description = "Allow the hidden browser fetch bridge window to signal readiness"
+commands.allow = ["browser_fetch_bridge_ready"]

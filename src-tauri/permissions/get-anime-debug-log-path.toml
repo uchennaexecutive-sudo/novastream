@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-get-anime-debug-log-path"
+description = "Allow reading the anime debug log path from Rust"
+commands.allow = ["get_anime_debug_log_path"]

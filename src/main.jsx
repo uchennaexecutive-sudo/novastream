@@ -16,7 +16,7 @@ import UpdateToast from './components/UI/UpdateToast'
 import useAppStore from './store/useAppStore'
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__
-const APP_VERSION = '1.1.6'
+const APP_VERSION = '1.2.0'
 const UPDATE_API = 'https://raw.githubusercontent.com/uchennaexecutive-sudo/novastream/main/updates/latest.json'
 const UPDATE_CHECK_TIMEOUT_MS = 15000
 const UPDATE_INITIAL_DELAY_MS = 5000
@@ -38,6 +38,11 @@ function compareVersions(a, b) {
 export { APP_VERSION }
 
 function Root() {
+  const isSpecialWindow = typeof window !== 'undefined'
+    && (
+      window.location.pathname.startsWith('/player-window')
+      || window.location.pathname.startsWith('/fetch-bridge')
+    )
   const setUpdateState = useAppStore(s => s.setUpdateState)
   const setUpdateInfo = useAppStore(s => s.setUpdateInfo)
   const setDownloadProgress = useAppStore(s => s.setDownloadProgress)
@@ -48,6 +53,8 @@ function Root() {
   const cancelledRef = useRef(false)
 
   useEffect(() => {
+    if (isSpecialWindow) return undefined
+
     let unlisten = null
 
     if (isTauri) {
@@ -61,9 +68,11 @@ function Root() {
     return () => {
       if (unlisten) unlisten()
     }
-  }, [setDownloadProgress])
+  }, [isSpecialWindow, setDownloadProgress])
 
   useEffect(() => {
+    if (isSpecialWindow) return undefined
+
     cancelledRef.current = false
 
     const clearRetryTimer = () => {
@@ -164,7 +173,7 @@ function Root() {
       cancelledRef.current = true
       clearRetryTimer()
     }
-  }, [setDownloadProgress, setUpdateInfo, setUpdateState])
+  }, [isSpecialWindow, setDownloadProgress, setUpdateInfo, setUpdateState])
 
   const handleRestart = async () => {
     try {
@@ -178,7 +187,7 @@ function Root() {
   return (
     <React.StrictMode>
       <App />
-      {updateState === 'ready' && isTauri && (
+      {!isSpecialWindow && updateState === 'ready' && isTauri && (
         <UpdateToast
           version={updateVersion}
           notes={updateNotes}

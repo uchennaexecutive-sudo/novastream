@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-fetch-movie-resolver-streams"
+description = "Resolve movie, series, and animation streams through Rust"
+commands.allow = ["fetch_movie_resolver_streams"]

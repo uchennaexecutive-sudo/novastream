@@ -2,118 +2,21 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Maximize, Minimize, X } from 'lucide-react'
-import { ANIME_SERVER_LABELS, getAnimeEmbeds, getMovieEmbeds, getSeriesEmbeds } from '../../lib/embeds'
+import {
+  ANIME_SERVER_LABELS,
+  getAnimeEmbeds,
+  getEmbedsForMediaType,
+  isMovieLikeMediaType,
+} from '../../lib/embeds'
 import { addToHistory } from '../../lib/supabase'
 import { saveProgress } from '../../lib/progress'
 import { imgOriginal, imgW500 } from '../../lib/tmdb'
-
-const DEFAULT_SERVER_LABELS = [
-  'VidSrc XYZ',
-  'VidSrc Net',
-  'VidSrc Me',
-  'AutoEmbed',
-  'MoviesAPI',
-  'NontonFilm',
-]
-
-const toNumber = (value) => {
-  const number = Number(value)
-  return Number.isFinite(number) ? number : null
-}
-
-const readNumber = (source, keys) => {
-  if (!source || typeof source !== 'object') return null
-
-  for (const key of keys) {
-    const value = toNumber(source[key])
-    if (value !== null) return value
-  }
-
-  return null
-}
-
-const parseMessagePayload = (payload) => {
-  let parsed = payload
-
-  if (typeof parsed === 'string') {
-    try {
-      parsed = JSON.parse(parsed)
-    } catch {
-      return null
-    }
-  }
-
-  if (!parsed || typeof parsed !== 'object') return null
-
-  const candidates = [
-    parsed,
-    parsed.data,
-    parsed.payload,
-    parsed.message,
-    parsed.player,
-    parsed.detail,
-    parsed.progress,
-  ].filter(Boolean)
-
-  for (const candidate of candidates) {
-    const progressSeconds = readNumber(candidate, [
-      'progressSeconds',
-      'currentTime',
-      'current_time',
-      'playedSeconds',
-      'time',
-      'seconds',
-      'position',
-    ])
-    const durationSeconds = readNumber(candidate, [
-      'durationSeconds',
-      'duration',
-      'totalDuration',
-      'total_duration',
-      'length',
-    ])
-
-    if (progressSeconds !== null || durationSeconds !== null) {
-      return {
-        progressSeconds: Math.max(0, Math.floor(progressSeconds || 0)),
-        durationSeconds: Math.max(0, Math.floor(durationSeconds || 0)),
-      }
-    }
-  }
-
-  return null
-}
-
-const withResumeParams = (url, seconds) => {
-  const startSeconds = Math.max(0, Math.floor(Number(seconds) || 0))
-  if (!startSeconds) return url
-
-  try {
-    const nextUrl = new URL(url)
-    nextUrl.searchParams.set('start', String(startSeconds))
-    nextUrl.searchParams.set('t', String(startSeconds))
-    nextUrl.hash = `t=${startSeconds}`
-    return nextUrl.toString()
-  } catch {
-    return url
-  }
-}
-
-const buildResumeMessages = (seconds) => {
-  const time = Math.max(0, Math.floor(Number(seconds) || 0))
-  if (!time) return []
-
-  return [
-    { type: 'nova:seek', seconds: time },
-    { type: 'seek', seconds: time },
-    { type: 'seek', time },
-    { action: 'seek', seconds: time },
-    { action: 'seek', time },
-    { command: 'seek', seconds: time },
-    { command: 'seek', time },
-    { event: 'seek', seconds: time },
-  ]
-}
+import {
+  buildResumeMessages,
+  DEFAULT_SERVER_LABELS,
+  parseMessagePayload,
+  withResumeParams,
+} from './iframePlayerShared'
 
 export default function PlayerModal({
   isOpen,
@@ -147,11 +50,9 @@ export default function PlayerModal({
   })
   const resumeTimersRef = useRef([])
 
-  const embeds = mediaType === 'movie'
-    ? getMovieEmbeds(tmdbId)
-    : isAnime
-      ? getAnimeEmbeds(tmdbId, season, episode)
-      : getSeriesEmbeds(tmdbId, season, episode)
+  const embeds = isAnime
+    ? getAnimeEmbeds(tmdbId, season, episode)
+    : getEmbedsForMediaType(mediaType, tmdbId, season, episode)
 
   const resumeSeconds = Math.max(
     0,
@@ -162,8 +63,8 @@ export default function PlayerModal({
   const serverLabels = isAnime ? ANIME_SERVER_LABELS : DEFAULT_SERVER_LABELS
   const serverLabel = serverLabels[sourceIndex] || `Server ${sourceIndex + 1}`
   const contentType = isAnime ? 'anime' : mediaType
-  const normalizedSeason = mediaType === 'movie' ? null : (Number(season) || null)
-  const normalizedEpisode = mediaType === 'movie' ? null : (Number(episode) || null)
+  const normalizedSeason = isMovieLikeMediaType(mediaType) ? null : (Number(season) || null)
+  const normalizedEpisode = isMovieLikeMediaType(mediaType) ? null : (Number(episode) || null)
   const poster = posterPath?.startsWith?.('http') ? posterPath : imgW500(posterPath)
   const backdrop = backdropPath?.startsWith?.('http') ? backdropPath : imgOriginal(backdropPath)
 

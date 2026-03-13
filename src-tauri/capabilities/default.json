@@ -3,12 +3,26 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "browser-fetch-bridge"
   ],
   "permissions": [
     "core:default",
+    "allow-search-hianime",
+    "allow-get-hianime-episodes",
+    "allow-get-hianime-stream",
+    "allow-fetch-anime-text",
+    "allow-get-anime-debug-log-path",
+    "allow-browser-fetch-bridge-ready",
+    "allow-complete-browser-fetch",
     "allow-fetch-hls-segment",
     "allow-fetch-hls-manifest",
+    "allow-fetch-movie-segment",
+    "allow-fetch-movie-manifest",
+    "allow-fetch-movie-resolver-streams",
+    "allow-probe-movie-stream",
+    "allow-open-iframe-player-window",
+    "allow-resolve-embed-stream",
     "updater:default",
     "process:default"
   ]

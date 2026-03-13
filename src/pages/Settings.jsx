@@ -244,6 +244,7 @@ export default function Settings() {
             v{APP_VERSION} — Changelog
           </p>
           <div className="text-xs space-y-1 mb-2" style={{ color: 'var(--text-muted)' }}>
+            <p>v1.2.0 - Native movie, series, and animation playback via Nuvio-backed resolver streams, custom controls, and deduplicated continue watching for episodic titles</p>
             <p>v1.1.6 - Fix anime streaming - dynamic AniWatch headers and Rust manifest rewrite for protected HLS playback</p>
             <p>v1.1.5 - Fix anime streaming - Rust segment fetcher bypasses HiAnime header restrictions</p>
             <p>v1.1.4 - Fix release workflow so latest.json publishes after GitHub release creation without the broken asset wait step</p>

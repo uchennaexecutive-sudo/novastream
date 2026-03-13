@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-probe-movie-stream"
+description = "Validate direct movie stream URLs through Rust"
+commands.allow = ["probe_movie_stream"]

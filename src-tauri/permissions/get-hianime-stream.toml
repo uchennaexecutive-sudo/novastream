@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-get-hianime-stream"
+description = "Allow AniWatch stream source requests through Rust"
+commands.allow = ["get_hianime_stream"]

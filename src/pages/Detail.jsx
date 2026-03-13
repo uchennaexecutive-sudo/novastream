@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import ReactPlayer from 'react-player'
 import { getDetails, imgOriginal, imgW500 } from '../lib/tmdb'
 import { preloadAnimePlayback } from '../lib/consumet'
+import { isMovieLikeMediaType } from '../lib/embeds'
 import {
   getContentProgressMap,
   getLatestProgress,
@@ -15,7 +16,7 @@ import GlassBadge from '../components/UI/GlassBadge'
 import MediaCard from '../components/Cards/MediaCard'
 import EpisodeSelector from '../components/Player/EpisodeSelector'
 import AnimePlayer from '../components/Player/AnimePlayer'
-import PlayerModal from '../components/Player/PlayerModal'
+import MoviePlayer from '../components/Player/MoviePlayer'
 import { addToWatchlist, isInWatchlist } from '../lib/supabase'
 
 const formatTime = (seconds) => {
@@ -31,6 +32,7 @@ const formatTime = (seconds) => {
 
 export default function Detail() {
   const { type, id } = useParams()
+  const isMovieLike = isMovieLikeMediaType(type)
   const location = useLocation()
   const requestedResumeAt = Math.max(0, Math.floor(Number(location.state?.resumeAt) || 0))
   const requestedResumeSeason = Number(location.state?.resumeSeason) || null
@@ -78,11 +80,11 @@ export default function Detail() {
         const [directProgress, latestProgress, nextProgressMap] = await Promise.all([
           getProgress(
             id,
-            type === 'movie' ? null : requestedResumeSeason,
-            type === 'movie' ? null : requestedResumeEpisode
+            isMovieLike ? null : requestedResumeSeason,
+            isMovieLike ? null : requestedResumeEpisode
           ),
           getLatestProgress(id),
-          type === 'movie' ? Promise.resolve({}) : getContentProgressMap(id),
+          isMovieLike ? Promise.resolve({}) : getContentProgressMap(id),
         ])
 
         if (cancelled) return
@@ -112,7 +114,7 @@ export default function Detail() {
     return () => {
       cancelled = true
     }
-  }, [id, location.state?.resumeProgress, requestedResumeEpisode, requestedResumeSeason, type])
+  }, [id, isMovieLike, location.state?.resumeProgress, requestedResumeEpisode, requestedResumeSeason, type])
 
   useEffect(() => {
     if (!isAnime || !animeTitle) return undefined
@@ -132,7 +134,7 @@ export default function Detail() {
     }
   }, [animeTitle, isAnime])
 
-  const handlePlay = (seasonNumber = 1, episodeNumber = 1, resumeSeconds = 0, durationHintSeconds = 0) => {
+  const handlePlay = async (seasonNumber = 1, episodeNumber = 1, resumeSeconds = 0, durationHintSeconds = 0) => {
     const nextSeason = seasonNumber || 1
     const nextEpisode = episodeNumber || 1
 
@@ -193,7 +195,7 @@ export default function Detail() {
     0,
     Math.floor(Number(data.runtime || data.episode_run_time?.[0] || 0) * 60)
   )
-  const resumeLabel = type === 'movie'
+  const resumeLabel = isMovieLike
     ? `Resume ${formatTime(resumeProgress?.progress_seconds || 0)}`
     : `Resume S${resumeProgress?.season || playSeason || 1} E${resumeProgress?.episode || playEpisode || 1}`
   const primaryLabel = showResumeButton ? resumeLabel : 'Stream Now'
@@ -314,8 +316,8 @@ export default function Detail() {
             <div className="flex gap-4 flex-wrap" style={{ marginTop: 32 }}>
               <motion.button
                 onClick={() => handlePlay(
-                  type === 'movie' ? 1 : (showResumeButton ? (resumeProgress?.season || playSeason || 1) : playSeason),
-                  type === 'movie' ? 1 : (showResumeButton ? (resumeProgress?.episode || playEpisode || 1) : playEpisode),
+                  isMovieLike ? 1 : (showResumeButton ? (resumeProgress?.season || playSeason || 1) : playSeason),
+                  isMovieLike ? 1 : (showResumeButton ? (resumeProgress?.episode || playEpisode || 1) : playEpisode),
                   showResumeButton ? (resumeProgress?.progress_seconds || playerResumeAt || 0) : 0,
                   defaultDurationHint
                 )}
@@ -446,20 +448,20 @@ export default function Detail() {
       </div>
 
       {!isAnime && (
-        <PlayerModal
-          isOpen={playerOpen}
-          onClose={() => setPlayerOpen(false)}
-          tmdbId={data.id}
-          mediaType={type}
-          title={title}
-          posterPath={data.poster_path}
-          backdropPath={data.backdrop_path}
-          season={playSeason}
-          episode={playEpisode}
-          resumeAt={playerResumeAt}
-          durationHintSeconds={playerDurationHint || defaultDurationHint}
-          isAnime={false}
-        />
+        playerOpen ? (
+          <MoviePlayer
+            tmdbId={data.id}
+            imdbId={data.imdb_id || null}
+            title={title}
+            poster={poster}
+            backdrop={backdrop}
+            contentType={type === 'tv' ? 'series' : type}
+            season={playSeason}
+            episode={playEpisode}
+            resumeAt={playerResumeAt}
+            onClose={() => setPlayerOpen(false)}
+          />
+        ) : null
       )}
 
       {isAnime && animePlayerOpen && (

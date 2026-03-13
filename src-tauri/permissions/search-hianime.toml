@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-search-hianime"
+description = "Allow AniWatch search requests through Rust"
+commands.allow = ["search_hianime"]
