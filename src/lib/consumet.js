@@ -6,6 +6,7 @@ const animeEpisodesCache = new Map()
 const isTauri = typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__)
 
 const normalizeTitle = (title) => String(title || '').trim().toLowerCase()
+const collapseWhitespace = (title) => String(title || '').replace(/\s+/g, ' ').trim()
 const normalizeTracks = (tracks) => (tracks || []).map((track) => ({
   ...track,
   kind: track.kind || (String(track.lang).toLowerCase() === 'thumbnails' ? 'thumbnails' : 'captions'),
@@ -13,6 +14,58 @@ const normalizeTracks = (tracks) => (tracks || []).map((track) => ({
   file: track.file || track.url || null,
   url: track.url || track.file || null,
 }))
+
+export function buildAnimeSearchCandidates(...titles) {
+  const seen = new Set()
+  const candidates = []
+
+  const push = (value) => {
+    const normalized = collapseWhitespace(value)
+    if (!normalized) return
+
+    const cacheKey = normalizeTitle(normalized)
+    if (seen.has(cacheKey)) return
+
+    seen.add(cacheKey)
+    candidates.push(normalized)
+  }
+
+  for (const rawTitle of titles) {
+    const title = collapseWhitespace(rawTitle)
+    if (!title) continue
+
+    push(title)
+    push(title.replace(/\s*:\s*.+$/, ''))
+    push(title.replace(/\s+-\s+.+$/, ''))
+    push(title.replace(/\bPart\s+\d+\b/ig, ''))
+    push(title.replace(/\bCour\s+\d+\b/ig, ''))
+    push(title.replace(/\bSeason\s+\d+\b.*$/i, ''))
+    push(title.replace(/\([^)]*\)/g, ''))
+  }
+
+  return candidates
+}
+
+export async function resolveAnimeSearch(...titles) {
+  const candidates = buildAnimeSearchCandidates(...titles)
+
+  for (const candidate of candidates) {
+    const anime = await searchAnime(candidate)
+    if (anime?.id) {
+      return {
+        anime,
+        matchedTitle: candidate,
+        candidates,
+      }
+    }
+  }
+
+  return {
+    anime: null,
+    matchedTitle: '',
+    candidates,
+  }
+}
 
 // Search anime by title
 export async function searchAnime(title, { fresh = false } = {}) {
@@ -122,8 +175,8 @@ export async function getAnimeStream(episodeId, server = 'hd-2', { fresh = false
   }
 }
 
-export async function preloadAnimePlayback(title) {
-  const anime = await searchAnime(title)
+export async function preloadAnimePlayback(...titles) {
+  const { anime, matchedTitle } = await resolveAnimeSearch(...titles)
   if (!anime?.id) return null
 
   const episodes = await getAnimeEpisodes(anime.id)
@@ -131,5 +184,6 @@ export async function preloadAnimePlayback(title) {
   return {
     animeId: anime.id,
     episodes,
+    matchedTitle,
   }
 }

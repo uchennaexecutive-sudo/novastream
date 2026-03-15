@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { ANIWATCH_BASE_URL, getAnimeEpisodes, getAnimeStream, searchAnime } from '../../lib/consumet'
+import { ANIWATCH_BASE_URL, getAnimeEpisodes, getAnimeStream, resolveAnimeSearch } from '../../lib/consumet'
 import { saveProgress } from '../../lib/progress'
 import SharedNativePlayer from './SharedNativePlayer'
 
@@ -39,6 +39,7 @@ const parseVtt = (text) => text
 
 export default function AnimePlayer({
   animeTitle,
+  animeAltTitle = '',
   contentId,
   season,
   episode,
@@ -233,7 +234,7 @@ export default function AnimePlayer({
       }
 
       try {
-        const anime = await searchAnime(animeTitle)
+        const { anime } = await resolveAnimeSearch(animeTitle, animeAltTitle)
         if (!anime?.id) throw new Error('Anime not found')
         if (cancelled) return
 
@@ -254,7 +255,7 @@ export default function AnimePlayer({
 
     loadAnime()
     return () => { cancelled = true }
-  }, [animeTitle, prefetchedAnime, resetPlaybackState])
+  }, [animeAltTitle, animeTitle, prefetchedAnime, resetPlaybackState])
 
   useEffect(() => {
     if (!animeId || episodes.length === 0) return undefined

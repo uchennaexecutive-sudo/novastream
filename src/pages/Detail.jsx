@@ -54,6 +54,7 @@ export default function Detail() {
 
   const isAnime = Boolean(location.state?.isAnime)
   const animeTitle = location.state?.animeTitle || location.state?.animeAltTitle || data?.title || data?.name || ''
+  const animeAltTitle = location.state?.animeAltTitle || data?.original_name || data?.original_title || ''
 
   useEffect(() => {
     setLoading(true)
@@ -117,11 +118,11 @@ export default function Detail() {
   }, [id, isMovieLike, location.state?.resumeProgress, requestedResumeEpisode, requestedResumeSeason, type])
 
   useEffect(() => {
-    if (!isAnime || !animeTitle) return undefined
+    if (!isAnime || (!animeTitle && !animeAltTitle)) return undefined
 
     let cancelled = false
 
-    preloadAnimePlayback(animeTitle)
+    preloadAnimePlayback(animeTitle, animeAltTitle)
       .then((payload) => {
         if (cancelled || !payload?.animeId) return
         animePrefetchRef.current.set(payload.animeId, payload)
@@ -132,7 +133,7 @@ export default function Detail() {
     return () => {
       cancelled = true
     }
-  }, [animeTitle, isAnime])
+  }, [animeAltTitle, animeTitle, isAnime])
 
   const handlePlay = async (seasonNumber = 1, episodeNumber = 1, resumeSeconds = 0, durationHintSeconds = 0) => {
     const nextSeason = seasonNumber || 1
@@ -467,6 +468,7 @@ export default function Detail() {
       {isAnime && animePlayerOpen && (
         <AnimePlayer
           animeTitle={animeTitle}
+          animeAltTitle={animeAltTitle}
           contentId={data.id}
           season={playSeason}
           episode={playEpisode}
